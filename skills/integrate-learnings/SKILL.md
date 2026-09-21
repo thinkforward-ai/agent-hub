@@ -1,6 +1,7 @@
 ---
 name: integrate-learnings
 description: Review and integrate reusable learnings through two approval gates. Use when the user mentions a knowledge gem, learning points, lessons learned, or learning findings, or when mandatory passive detection finds a candidate.
+source: https://github.com/thinkforward-ai/agent-hub
 ---
 
 # Integrate Learnings
@@ -70,6 +71,13 @@ Present:
 ```
 
 Recommend every destination that should change to integrate the learning consistently. Explain why each destination is appropriate. Consider scope, lifetime, audience, ownership, and mutability. The user may choose different destinations.
+
+When a destination is a skill file from a remote source repository, include the source URL and guide the user to contribute changes upstream:
+
+```md
+**Source repository:** <URL from skill frontmatter>
+**Upstream contribution:** Propose cloning the repository or finding it locally to make the fix in the source
+```
 
 Add `Trade-offs` only when material.
 
