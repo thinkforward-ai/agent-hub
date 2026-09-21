@@ -7,7 +7,7 @@ Shared agent skills and global instructions installed from one central copy.
 1. Download the installer:
 
    ```bash
-   curl -fsSLO https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/install.sh
+   curl -fsSLO https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/bin/install.sh
    ```
 
 2. Review `install.sh`.
