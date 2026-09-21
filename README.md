@@ -4,6 +4,14 @@ Shared agent skills and global instructions installed from one central copy.
 
 ## Install
 
+**Quick install (one-liner):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/bin/install.sh | bash
+```
+
+**Manual install (review first):**
+
 1. Download the installer:
 
    ```bash
