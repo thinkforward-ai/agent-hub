@@ -27,45 +27,31 @@ explicitly confirms it as a follow-up question.
 
 ## Rules
 
-- Keep `open-questions.md` limited to unresolved questions.
-- Presence in the file implies the question is open; never add a status field.
-- Give each question the next stable `Q<n>` ID and advance `Next question ID`.
-- Never reuse an ID removed during resolution.
-- One question covers one coherent decision. Split independent issues.
-- Keep the record concise. Preserve meaning and important specifics, not conversation
-  transcripts.
-- Check existing open questions and accepted decisions before creating a duplicate.
-- Record only known context. Do not invent constraints, criteria, resolutions, or
-  details.
-- Creating the question does not authorize investigation or external action.
+- `open-questions.md` contains only unresolved questions (no status field).
+- Use next stable `Q<n>` ID; advance `Next question ID`; never reuse IDs.
+- One question = one coherent decision. Split independent issues.
+- Keep records concise: preserve meaning, not conversation transcripts.
+- Check existing questions and decisions before creating duplicates.
+- Record only known context; do not invent constraints or resolutions.
+- Registration does not authorize investigation or external action.
 
 ## Workflow
 
 ### 1. Establish the Need
 
-Capture:
+Capture: exact question, impact/blocker, minimum context, known constraints, resolution points.
 
-- the exact question,
-- why it matters or what it blocks,
-- the minimum relevant context,
-- known constraints,
-- the points that must be resolved.
+For follow-ups: frame as investigation/decision question. Mention source decision filename in `### Context` when useful.
 
-For a confirmed follow-up, frame the follow-up as a question to investigate or decide.
-Mention the source decision filename in `### Context` only when useful.
-
-Ask the user only when missing information prevents a clear, useful record.
+Ask user only when missing information prevents a clear record.
 
 ### 2. Check for Duplication
 
-Read `open-questions.md` and relevant files under `decisions/`.
+Read `open-questions.md` and `decisions/`:
 
-- If an open question already covers the issue, update that question only with
-  non-duplicative important context.
-- If an accepted decision already answers it, do not open a duplicate. Explain the
-  existing answer.
-- If new evidence challenges an accepted decision, open a new question and identify
-  the earlier decision concisely in `### Context`.
+- If open question exists: update with non-duplicative context only.
+- If decision answers it: do not duplicate; explain existing answer.
+- If new evidence challenges decision: open new question; identify earlier decision in `### Context`.
 
 ### 3. Register the Question
 
@@ -107,24 +93,15 @@ Append the new question using:
   - **Details:** <Known context or remaining question>
 ```
 
-Omit `### Constraints` when none are known. Add `### Decision Criteria`,
-`### Findings`, or `### Proposals` later only when they contain useful information.
+Omit `### Constraints` when unknown. Add `### Decision Criteria`, `### Findings`, or `### Proposals` later only when useful.
 
-After appending the question, advance `Next question ID` to the next unused value.
+Advance `Next question ID` after appending.
 
 ### 4. Validate
 
-Verify:
+Verify: new ID, next ID advanced, coherent issue, no status field, concise/no placeholders, resolution points use `❓`/`Resolution: Pending`, no duplicates, no unauthorized investigation.
 
-- the ID is new and the next ID advanced,
-- the title and question describe one coherent issue,
-- no status field exists,
-- the record is concise and contains no placeholders,
-- every resolution point uses `❓` and says `Resolution: Pending`,
-- no duplicate question or already-settled decision was created,
-- no investigation or external action was performed without separate authorization.
-
-Report only the created or updated question ID and title.
+Report only created/updated question ID and title.
 
 ## Completion Boundary
 
