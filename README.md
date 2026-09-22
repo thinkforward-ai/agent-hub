@@ -33,10 +33,12 @@ The installer downloads a clean snapshot to `~/.agent-hub` and creates symlinks 
 - **Skills:**
   - `~/.factory/skills` (Factory)
   - `~/.config/devin/skills` (Devin CLI)
+  - `~/.claude/skills` (Claude Code)
 
 - **Global Instructions:**
   - `~/.factory/AGENTS.md` (Factory)
   - `~/.config/devin/AGENTS.md` (Devin CLI)
+  - `~/.claude/CLAUDE.md` (Claude Code, which reads `CLAUDE.md` instead of `AGENTS.md`)
 
 If any of these paths already exist, the installer will fail unless you use the backup option.
 

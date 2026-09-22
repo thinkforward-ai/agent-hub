@@ -1,6 +1,6 @@
 ---
 name: integrate-learnings
-description: Review and integrate reusable learnings through two approval gates. Use when the user mentions a knowledge gem, learning points, lessons learned, or learning findings, or when mandatory passive detection finds a candidate.
+description: Review and integrate reusable learnings through two approval gates. Use when the user mentions a knowledge gem, learning points, lessons learned, or learning findings, or when mandatory passive detection finds a candidate, such as a workaround after a failed attempt, a non-obvious fix, a command, path, or setting that took several tries to find, or a user correction.
 source: https://github.com/thinkforward-ai/agent-hub
 ---
 
@@ -22,9 +22,9 @@ When invoked, check whether effective session instructions contain an equivalent
 ```md
 ## Mandatory passive learning detection
 
-At every session start or resume, you MUST activate passive learning detection and keep it active for the entire session. Do not skip or defer activation.
+At every session start or resume, you MUST activate passive learning detection and keep it active for the entire session. Do not skip or defer activation. Confirm activation by starting your first response of the session with `Learning detection: active`.
 
-During all work, watch for reusable findings that save time, shortcut to a solution, avoid unnecessary attempts, or prevent repeated failures. When one is found, invoke `integrate-learnings`.
+During all work, watch for reusable findings that save time, shortcut to a solution, avoid unnecessary attempts, or prevent repeated failures, such as a workaround after a failed attempt, a non-obvious fix, a command, path, or setting that took several tries to find, or a user correction. When one is found, invoke `integrate-learnings`.
 
 This is mandatory passive session behavior, not background polling.
 ```

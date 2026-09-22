@@ -10,13 +10,16 @@ FACTORY_AGENTS="$FACTORY_HOME/AGENTS.md"
 DEVIN_CONFIG_HOME="${DEVIN_CONFIG_HOME:-$HOME/.config/devin}"
 DEVIN_SKILLS_HOME="$DEVIN_CONFIG_HOME/skills"
 DEVIN_AGENTS="$DEVIN_CONFIG_HOME/AGENTS.md"
+CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+CLAUDE_SKILLS="$CLAUDE_HOME/skills"
+CLAUDE_INSTRUCTIONS="$CLAUDE_HOME/CLAUDE.md"
 BACKUP_EXISTING=false
 
 usage() {
   cat <<'EOF'
 Usage: install.sh [--backup-existing]
 
-Install Agent Hub from a clean public snapshot and link Factory and Devin skills and global instructions to it.
+Install Agent Hub from a clean public snapshot and link Factory, Devin, and Claude Code skills and global instructions to it.
 
 Options:
   --backup-existing  Move a conflicting skills or AGENTS.md path to a timestamped backup.
@@ -26,6 +29,7 @@ Environment:
   AGENT_HUB_HOME         Central installation directory (default: ~/.agent-hub)
   FACTORY_HOME           Factory configuration directory (default: ~/.factory)
   DEVIN_CONFIG_HOME      Devin configuration directory (default: ~/.config/devin)
+  CLAUDE_CONFIG_DIR      Claude Code configuration directory (default: ~/.claude)
   AGENT_HUB_ARCHIVE_URL  Snapshot URL (default: public main branch archive)
 EOF
 }
@@ -82,6 +86,11 @@ case "$DEVIN_CONFIG_HOME" in
   *) fail "DEVIN_CONFIG_HOME must be an absolute path" ;;
 esac
 
+case "$CLAUDE_HOME" in
+  /*) ;;
+  *) fail "CLAUDE_CONFIG_DIR must be an absolute path" ;;
+esac
+
 expected_skills_target="$AGENT_HUB_HOME/current/skills"
 expected_agents_target="$AGENT_HUB_HOME/current/AGENTS.md"
 
@@ -104,6 +113,8 @@ check_link_conflict "$FACTORY_SKILLS" "$expected_skills_target" "Factory skills"
 check_link_conflict "$DEVIN_SKILLS_HOME" "$expected_skills_target" "Devin skills"
 check_link_conflict "$FACTORY_AGENTS" "$expected_agents_target" "Factory AGENTS.md"
 check_link_conflict "$DEVIN_AGENTS" "$expected_agents_target" "Devin AGENTS.md"
+check_link_conflict "$CLAUDE_SKILLS" "$expected_skills_target" "Claude Code skills"
+check_link_conflict "$CLAUDE_INSTRUCTIONS" "$expected_agents_target" "Claude Code CLAUDE.md"
 
 if [ -e "$AGENT_HUB_HOME" ] && [ ! -d "$AGENT_HUB_HOME" ]; then
   fail "$AGENT_HUB_HOME exists and is not a directory"
@@ -184,6 +195,8 @@ create_symlink "$FACTORY_SKILLS" "$expected_skills_target" "$FACTORY_HOME" "Fact
 create_symlink "$DEVIN_SKILLS_HOME" "$expected_skills_target" "$DEVIN_CONFIG_HOME" "Devin skills"
 create_symlink "$FACTORY_AGENTS" "$expected_agents_target" "$FACTORY_HOME" "Factory AGENTS.md"
 create_symlink "$DEVIN_AGENTS" "$expected_agents_target" "$DEVIN_CONFIG_HOME" "Devin AGENTS.md"
+create_symlink "$CLAUDE_SKILLS" "$expected_skills_target" "$CLAUDE_HOME" "Claude Code skills"
+create_symlink "$CLAUDE_INSTRUCTIONS" "$expected_agents_target" "$CLAUDE_HOME" "Claude Code CLAUDE.md"
 
 old_release_id="${old_release#releases/}"
 if [ "$old_release" = "releases/$old_release_id" ] &&
@@ -200,3 +213,5 @@ printf 'Factory skills linked at %s\n' "$FACTORY_SKILLS"
 printf 'Devin skills linked at %s\n' "$DEVIN_SKILLS_HOME"
 printf 'Factory AGENTS.md linked at %s\n' "$FACTORY_AGENTS"
 printf 'Devin AGENTS.md linked at %s\n' "$DEVIN_AGENTS"
+printf 'Claude Code skills linked at %s\n' "$CLAUDE_SKILLS"
+printf 'Claude Code CLAUDE.md linked at %s\n' "$CLAUDE_INSTRUCTIONS"

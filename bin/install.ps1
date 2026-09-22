@@ -11,17 +11,14 @@ $ErrorActionPreference = "Stop"
 $env:AGENT_HUB_ARCHIVE_URL = if ($env:AGENT_HUB_ARCHIVE_URL) { $env:AGENT_HUB_ARCHIVE_URL } else { "https://github.com/thinkforward-ai/agent-hub/archive/refs/heads/main.tar.gz" }
 $env:AGENT_HUB_HOME = if ($env:AGENT_HUB_HOME) { $env:AGENT_HUB_HOME } else { Join-Path $env:USERPROFILE ".agent-hub" }
 $env:FACTORY_HOME = if ($env:FACTORY_HOME) { $env:FACTORY_HOME } else { Join-Path $env:USERPROFILE ".factory" }
-$env:FACTORY_SKILLS = Join-Path $env:FACTORY_HOME "skills"
-$env:FACTORY_AGENTS = Join-Path $env:FACTORY_HOME "AGENTS.md"
 $env:DEVIN_CONFIG_HOME = if ($env:DEVIN_CONFIG_HOME) { $env:DEVIN_CONFIG_HOME } else { Join-Path $env:USERPROFILE ".config\devin" }
-$env:DEVIN_SKILLS_HOME = Join-Path $env:DEVIN_CONFIG_HOME "skills"
-$env:DEVIN_AGENTS = Join-Path $env:DEVIN_CONFIG_HOME "AGENTS.md"
+$env:CLAUDE_CONFIG_DIR = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".claude" }
 
 function Show-Usage {
     Write-Host @"
 Usage: install.ps1 [-BackupExisting] [-Help]
 
-Install Agent Hub from a clean public snapshot and link Factory and Devin skills and global instructions to it.
+Install Agent Hub from a clean public snapshot and link Factory, Devin, and Claude Code skills and global instructions to it.
 
 Options:
   -BackupExisting  Move a conflicting skills or AGENTS.md path to a timestamped backup.
@@ -31,14 +28,62 @@ Environment:
   AGENT_HUB_HOME         Central installation directory (default: ~\.agent-hub)
   FACTORY_HOME           Factory configuration directory (default: ~\.factory)
   DEVIN_CONFIG_HOME      Devin configuration directory (default: ~\.config\devin)
+  CLAUDE_CONFIG_DIR      Claude Code configuration directory (default: ~\.claude)
   AGENT_HUB_ARCHIVE_URL  Snapshot URL (default: public main branch archive)
 "@
 }
 
 function Write-ErrorAndExit {
     param([string]$Message)
-    Write-Error $Message
+    $host.UI.WriteErrorLine("Error: $Message")
     exit 1
+}
+
+# Returns the item at a path without following links, or $null. Unlike
+# Test-Path, this also finds broken links.
+function Get-PathEntry {
+    param([string]$Path)
+    Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+}
+
+# Returns the target of a junction or symlink, or $null for anything else.
+function Get-LinkTarget {
+    param([string]$Path)
+    $item = Get-PathEntry $Path
+    if ($item -and $item.LinkType) {
+        # Windows PowerShell returns Target as an array.
+        return [string](@($item.Target)[0])
+    }
+    return $null
+}
+
+function Test-SamePath {
+    param([string]$Left, [string]$Right)
+    if (-not $Left -or -not $Right) {
+        return $false
+    }
+    $Left = [System.IO.Path]::GetFullPath($Left).TrimEnd("\")
+    $Right = [System.IO.Path]::GetFullPath($Right).TrimEnd("\")
+    return $Left -eq $Right
+}
+
+# Removes a junction or symlink without touching the directory it points to.
+function Remove-Link {
+    param([string]$Path)
+    $item = Get-PathEntry $Path
+    if ($item -and $item.PSIsContainer) {
+        [System.IO.Directory]::Delete($Path)
+    } elseif ($item) {
+        [System.IO.File]::Delete($Path)
+    }
+}
+
+function Invoke-Native {
+    param([string]$Command, [string[]]$Arguments)
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorAndExit "$Command failed with exit code $LASTEXITCODE"
+    }
 }
 
 if ($Help) {
@@ -46,22 +91,29 @@ if ($Help) {
     exit 0
 }
 
-# Check required commands
-$requiredCommands = @("curl", "tar")
+# Check required commands. Use curl.exe explicitly: in Windows PowerShell,
+# curl is an alias for Invoke-WebRequest.
+$requiredCommands = @("curl.exe", "tar.exe")
 foreach ($cmd in $requiredCommands) {
-    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Command $cmd -CommandType Application -ErrorAction SilentlyContinue)) {
         Write-ErrorAndExit "required command not found: $cmd"
     }
 }
 
 # Validate paths are absolute
-foreach ($var in @("AGENT_HUB_HOME", "FACTORY_HOME", "DEVIN_CONFIG_HOME")) {
-    $path = [System.IO.Path]::GetFullPath((Get-Item -Path (Get-Variable -Name $var).Value).FullName)
-    if (-not [System.IO.Path]::IsPathRooted($path)) {
+foreach ($var in @("AGENT_HUB_HOME", "FACTORY_HOME", "DEVIN_CONFIG_HOME", "CLAUDE_CONFIG_DIR")) {
+    $value = [Environment]::GetEnvironmentVariable($var)
+    if (-not [System.IO.Path]::IsPathRooted($value)) {
         Write-ErrorAndExit "$var must be an absolute path"
     }
-    Set-Variable -Name $var -Value $path
+    Set-Item -Path "env:$var" -Value ([System.IO.Path]::GetFullPath($value))
 }
+$env:FACTORY_SKILLS = Join-Path $env:FACTORY_HOME "skills"
+$env:FACTORY_AGENTS = Join-Path $env:FACTORY_HOME "AGENTS.md"
+$env:DEVIN_SKILLS_HOME = Join-Path $env:DEVIN_CONFIG_HOME "skills"
+$env:DEVIN_AGENTS = Join-Path $env:DEVIN_CONFIG_HOME "AGENTS.md"
+$env:CLAUDE_SKILLS = Join-Path $env:CLAUDE_CONFIG_DIR "skills"
+$env:CLAUDE_INSTRUCTIONS = Join-Path $env:CLAUDE_CONFIG_DIR "CLAUDE.md"
 
 $expectedSkillsTarget = Join-Path $env:AGENT_HUB_HOME "current\skills"
 $expectedAgentsTarget = Join-Path $env:AGENT_HUB_HOME "current\AGENTS.md"
@@ -73,12 +125,12 @@ function Test-LinkConflict {
         [string]$ResourceName
     )
 
-    if (Test-Path $TargetPath -PathType Junction) {
-        $currentTarget = (Get-Item $TargetPath).Target
-        if ($currentTarget -ne $ExpectedTarget -and -not $BackupExisting) {
+    $currentTarget = Get-LinkTarget $TargetPath
+    if ($currentTarget) {
+        if (-not (Test-SamePath $currentTarget $ExpectedTarget) -and -not $BackupExisting) {
             Write-ErrorAndExit "$ResourceName points to $currentTarget; rerun with -BackupExisting to preserve and replace it"
         }
-    } elseif (Test-Path $TargetPath) {
+    } elseif (Get-PathEntry $TargetPath) {
         if (-not $BackupExisting) {
             Write-ErrorAndExit "$ResourceName already exists; rerun with -BackupExisting to preserve and replace it"
         }
@@ -89,6 +141,8 @@ Test-LinkConflict $env:FACTORY_SKILLS $expectedSkillsTarget "Factory skills"
 Test-LinkConflict $env:DEVIN_SKILLS_HOME $expectedSkillsTarget "Devin skills"
 Test-LinkConflict $env:FACTORY_AGENTS $expectedAgentsTarget "Factory AGENTS.md"
 Test-LinkConflict $env:DEVIN_AGENTS $expectedAgentsTarget "Devin AGENTS.md"
+Test-LinkConflict $env:CLAUDE_SKILLS $expectedSkillsTarget "Claude Code skills"
+Test-LinkConflict $env:CLAUDE_INSTRUCTIONS $expectedAgentsTarget "Claude Code CLAUDE.md"
 
 if (Test-Path $env:AGENT_HUB_HOME -PathType Leaf) {
     Write-ErrorAndExit "$env:AGENT_HUB_HOME exists and is not a directory"
@@ -115,8 +169,8 @@ try {
     New-Item -ItemType Directory -Path $extracted -Force | Out-Null
 
     Write-Host "Downloading Agent Hub snapshot..."
-    curl --fail --location --silent --show-error $env:AGENT_HUB_ARCHIVE_URL --output $archive
-    tar -xzf $archive --strip-components=1 --directory $extracted
+    Invoke-Native "curl.exe" @("--fail", "--location", "--silent", "--show-error", $env:AGENT_HUB_ARCHIVE_URL, "--output", $archive)
+    Invoke-Native "tar.exe" @("-xzf", $archive, "--strip-components=1", "--directory", $extracted)
 
     $skillsDir = Join-Path $extracted "skills"
     if (-not (Test-Path $skillsDir -PathType Container)) {
@@ -138,9 +192,8 @@ try {
     $oldRelease = $null
 
     $currentLink = Join-Path $env:AGENT_HUB_HOME "current"
-    if (Test-Path $currentLink -PathType Junction) {
-        $oldRelease = (Get-Item $currentLink).Target
-    } elseif (Test-Path $currentLink) {
+    $oldRelease = Get-LinkTarget $currentLink
+    if (-not $oldRelease -and (Get-PathEntry $currentLink)) {
         Write-ErrorAndExit "$env:AGENT_HUB_HOME\current exists and is not a managed symlink"
     }
 
@@ -152,12 +205,9 @@ try {
         Move-Item $extracted $releaseDir
     }
 
-    # Remove old current link if exists
-    if (Test-Path $currentLink) {
-        Remove-Item $currentLink -Force
-    }
-
-    # Create new junction
+    # Replace the current junction. Remove-Link deletes only the link, never
+    # the release it points to.
+    Remove-Link $currentLink
     New-Item -ItemType Junction -Path $currentLink -Target $releaseDir | Out-Null
 
     function New-Symlink {
@@ -169,28 +219,31 @@ try {
         )
 
         New-Item -ItemType Directory -Path $ParentDir -Force | Out-Null
-        if (Test-Path $TargetPath) {
-            $currentTarget = $null
-            if (Test-Path $TargetPath -PathType Junction) {
-                $currentTarget = (Get-Item $TargetPath).Target
-            }
-
-            if ($currentTarget -ne $ExpectedTarget) {
+        if (Get-PathEntry $TargetPath) {
+            if (-not (Test-SamePath (Get-LinkTarget $TargetPath) $ExpectedTarget)) {
                 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
                 $backup = "$TargetPath.backup.$timestamp"
-                while (Test-Path $backup) {
-                    $backup = "$backup.$([Random]::Next())"
+                while (Get-PathEntry $backup) {
+                    $backup = "$backup.$(Get-Random)"
                 }
-                Move-Item $TargetPath $backup
+                Move-Item -LiteralPath $TargetPath -Destination $backup
                 Write-Host "Preserved existing $ResourceName at $backup"
             }
         }
 
-        if (-not (Test-Path $TargetPath -PathType Junction)) {
-            if (Test-Path $TargetPath) {
-                Remove-Item $TargetPath -Recurse -Force
+        if (-not (Get-PathEntry $TargetPath)) {
+            if (Test-Path -LiteralPath $ExpectedTarget -PathType Container) {
+                # Junctions work for directories without extra privileges.
+                New-Item -ItemType Junction -Path $TargetPath -Target $ExpectedTarget | Out-Null
+            } else {
+                # Files need a symbolic link, which requires Developer Mode or
+                # an elevated shell on Windows.
+                try {
+                    New-Item -ItemType SymbolicLink -Path $TargetPath -Target $ExpectedTarget | Out-Null
+                } catch {
+                    Write-ErrorAndExit "cannot create symbolic link for $ResourceName at ${TargetPath}: enable Windows Developer Mode or run as administrator"
+                }
             }
-            New-Item -ItemType Junction -Path $TargetPath -Target $ExpectedTarget | Out-Null
         }
     }
 
@@ -198,6 +251,8 @@ try {
     New-Symlink $env:DEVIN_SKILLS_HOME $expectedSkillsTarget $env:DEVIN_CONFIG_HOME "Devin skills"
     New-Symlink $env:FACTORY_AGENTS $expectedAgentsTarget $env:FACTORY_HOME "Factory AGENTS.md"
     New-Symlink $env:DEVIN_AGENTS $expectedAgentsTarget $env:DEVIN_CONFIG_HOME "Devin AGENTS.md"
+    New-Symlink $env:CLAUDE_SKILLS $expectedSkillsTarget $env:CLAUDE_CONFIG_DIR "Claude Code skills"
+    New-Symlink $env:CLAUDE_INSTRUCTIONS $expectedAgentsTarget $env:CLAUDE_CONFIG_DIR "Claude Code CLAUDE.md"
 
     # Clean up old release
     if ($oldRelease) {
@@ -215,6 +270,8 @@ try {
     Write-Host "Devin skills linked at $env:DEVIN_SKILLS_HOME"
     Write-Host "Factory AGENTS.md linked at $env:FACTORY_AGENTS"
     Write-Host "Devin AGENTS.md linked at $env:DEVIN_AGENTS"
+    Write-Host "Claude Code skills linked at $env:CLAUDE_SKILLS"
+    Write-Host "Claude Code CLAUDE.md linked at $env:CLAUDE_INSTRUCTIONS"
 
 } finally {
     if (Test-Path $tmpDir) {
