@@ -2,31 +2,33 @@
 
 Shared agent skills and global instructions installed from one central copy.
 
-## Install
-
-**Quick install (one-liner):**
+## Install on Linux/macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/bin/install.sh | bash
 ```
 
-**Manual install (review first):**
+To preserve existing files before replacement:
 
-1. Download the installer:
+```bash
+bash install.sh --backup-existing
+```
 
-   ```bash
-   curl -fsSLO https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/bin/install.sh
-   ```
+## Install on Windows
 
-2. Review `install.sh`.
+```powershell
+irm https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/bin/install.ps1 | iex
+```
 
-3. Install:
+To preserve existing files before replacement:
 
-   ```bash
-   bash install.sh
-   ```
+```powershell
+.\install.ps1 -BackupExisting
+```
 
-The installer downloads a clean snapshot to `~/.agent-hub` and links both:
+## What the installer does
+
+The installer downloads a clean snapshot to `~/.agent-hub` and creates symlinks to:
 
 - **Skills:**
   - `~/.factory/skills` (Factory)
@@ -36,18 +38,11 @@ The installer downloads a clean snapshot to `~/.agent-hub` and links both:
   - `~/.factory/AGENTS.md` (Factory)
   - `~/.config/devin/AGENTS.md` (Devin CLI)
 
-to its central skills and instruction directories.
+If any of these paths already exist, the installer will fail unless you use the backup option.
 
-**Warning:** If any of these paths already exist, the installer will fail unless you use `--backup-existing`. Existing files will be backed up with a timestamp before replacement.
+## Updating
 
-If existing files exist, preserve them before replacement:
-
-```bash
-bash install.sh --backup-existing
-```
-
-Run the installer again to update the central snapshot. Existing
-`~/.agent-hub/.env` content is preserved.
+Run the installer again to update the central snapshot. Existing `~/.agent-hub/.env` content is preserved.
 
 ## Instruction Hierarchy
 
