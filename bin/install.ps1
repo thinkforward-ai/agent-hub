@@ -54,6 +54,16 @@ function Remove-Entry([string]$Path) {
 function New-DirectoryLink([string]$Path, [string]$Target) {
     New-Item -ItemType Junction -Path $Path -Target $Target | Out-Null
 }
+function Remove-OwnershipMarker {
+    $path = Join-Path $hub ".managed-by-agent-hub"
+    $item = Get-Entry $path
+    if (-not $item -or $item.LinkType -or $item.PSIsContainer) { return }
+    $content = Get-Content -LiteralPath $path -Raw
+    $message = "managed by https://github.com/thinkforward-ai/agent-hub"
+    if ($content -eq "$message`n" -or $content -eq "$message`r`n") {
+        Remove-Item -LiteralPath $path
+    }
+}
 function Hold-Entry([string]$Path) {
     if (-not (Get-Entry $Path)) { return }
     $destination = Join-Path $tmp "held\$($script:held.Count)"
@@ -66,7 +76,8 @@ if (Get-Entry $marker) {
         throw "Managed layout is incomplete; no changes made"
     }
     if ((Test-Path $instructions -PathType Leaf) -and -not (Get-Entry $current)) {
-        Write-Host "Agent Hub is already set up at $hub; use manage-skills for changes."
+        Remove-OwnershipMarker
+        Write-Host "Agent Hub is already set up at $hub; use the management skill for changes."
         exit 0
     }
     if ((Get-Entry $instructions) -or -not (Get-Target $current)) { throw "Managed instructions are incomplete; no changes made" }
@@ -139,6 +150,7 @@ if (Get-Entry $marker) {
             $names = @($names | Select-Object -Skip 1)
         }
         $names | Set-Content -LiteralPath $list
+        Remove-OwnershipMarker
         Write-Host "Verified old release backup: $backup"
         Write-Host "Agent Hub instructions now live at $instructions"
     } finally {
@@ -273,6 +285,31 @@ try {
 
     $coreStage = Join-Path $tmp "core-skills"
     Move-Item -LiteralPath $core -Destination $coreStage
+    foreach ($folder in @(Get-ChildItem -LiteralPath $coreStage -Directory)) {
+        $name = $folder.Name
+        if ($name -cnotmatch '^[a-z0-9]+(-[a-z0-9]+)*$') { throw "Invalid core skill name: $name" }
+        $skillFile = Join-Path $folder.FullName "SKILL.md"
+        $text = [System.IO.File]::ReadAllText($skillFile)
+        if (-not $text.Contains("source: https://github.com/thinkforward-ai/agent-hub")) {
+            throw "Missing core skill source: $name"
+        }
+        $frontmatter = [regex]::Match($text, '\A---\r?\n(?s:.*?)\r?\n---\r?\n')
+        $namePattern = "(?m)^name: $([regex]::Escape($name))(?=\r?$)"
+        if (-not $frontmatter.Success -or [regex]::Matches($frontmatter.Value, $namePattern).Count -ne 1) {
+            throw "Invalid core skill frontmatter: $name"
+        }
+        $newName = "agent-hub-$name"
+        $header = [regex]::Replace($frontmatter.Value, $namePattern, "name: $newName")
+        $note = 'Installed by Agent Hub as `{0}` from `https://github.com/thinkforward-ai/agent-hub`. References to skills from this repository use the same `agent-hub-` prefix.' -f $newName
+        $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+        $text = $header + $newline + $note + $newline + $text.Substring($frontmatter.Length)
+        [System.IO.File]::WriteAllText($skillFile, $text, (New-Object System.Text.UTF8Encoding($false)))
+        if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+            [System.IO.Directory]::SetUnixFileMode($folder.FullName, [System.IO.UnixFileMode]493)
+            [System.IO.File]::SetUnixFileMode($skillFile, [System.IO.UnixFileMode]420)
+        }
+        Move-Item -LiteralPath $folder.FullName -Destination (Join-Path $coreStage $newName)
+    }
     Hold-Entry (Join-Path $hub "skills")
     Move-Item -LiteralPath $coreStage -Destination (Join-Path $hub "skills")
     $sharedCreated = $true
@@ -302,7 +339,7 @@ try {
         $created += $sources
     }
     foreach ($path in $skillPaths) {
-        if (-not (Test-Path (Join-Path $path "manage-skills\SKILL.md") -PathType Leaf)) {
+        if (-not (Test-Path (Join-Path $path "agent-hub-manage-skills\SKILL.md") -PathType Leaf)) {
             throw "Manager skill not visible at $path"
         }
     }
@@ -333,6 +370,7 @@ try {
             Remove-Item -LiteralPath $releasesDir
         }
     }
+    Remove-OwnershipMarker
     Write-Host "Agent Hub skills installed at $(Join-Path $hub 'skills')"
     Write-Host "Sources available at $sources"
     if ($oldRelease) { Write-Host "Legacy skills are no longer active; recover them from the backup if needed." }

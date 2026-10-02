@@ -32,16 +32,18 @@ The installer downloads a clean snapshot, installs `AGENTS.md` directly at `~/.a
   - `~/.config/devin/AGENTS.md` (Devin CLI)
   - `~/.claude/CLAUDE.md` (Claude Code, which reads `CLAUDE.md` instead of `AGENTS.md`)
 
-Fresh setup installs Agent Hub core skills without prompts from the hardcoded official archive. Existing instruction files that do not belong to Agent Hub are never replaced.
+Fresh setup installs Agent Hub core skills without prompts from the hardcoded official archive. Installed repository skills use `<repo-name>-<skill-name>` as both their folder and skill name (for example, `agent-hub-manage-skills` and `project-guide-open-question`). On Unix, Agent Hub sets installed skill directories to `755` and `SKILL.md` to `644`; Windows uses its inherited ACLs instead of Unix modes. Source repositories are unchanged. Existing instruction files that do not belong to Agent Hub are never replaced.
 On Windows, creating instruction file links requires Developer Mode or an elevated shell.
 
 ## Migrating a legacy installation
 
 Run the same installer command. For legacy skills, it verifies a compressed backup of the previous release and skill paths before switching to the new layout. Old skills, including `synced/`, are no longer active; recover them from the backup if needed. For an already-managed installation with a `current` link, it backs up that release and moves only instruction links, without changing installed skills. Existing `~/.agent-hub/.env` and source URLs stay in place. Only the two most recent installer-managed version backups are retained.
 
+The legacy `.managed-by-agent-hub` ownership marker is removed after the new layout is verified. A modified ownership file is left untouched.
+
 ## After installation
 
-Use the `manage-skills` skill to browse sources and to review, install, remove, or update skills. Rerunning the installer on the new layout makes no changes.
+Use the `agent-hub-manage-skills` skill to browse sources and to review, install, remove, or update skills. An existing unprefixed setup can be renamed through a reviewed, backed-up manager operation; rerunning the installer on the new layout makes no changes. The service-synced `synced/` container is not renamed.
 
 The design is recorded in [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only source registry](decisions/20261002-2026-url-only-skill-source-registry.md), [safety review](decisions/20261002-2058-skill-source-safety-review.md), and [trusted core installation](decisions/20261002-2152-trusted-agent-hub-core-installation.md).
 

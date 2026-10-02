@@ -16,6 +16,14 @@ usage() {
 
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
+retire_ownership_marker() {
+  local path="$AGENT_HUB_HOME/.managed-by-agent-hub"
+  if [ -f "$path" ] && [ ! -L "$path" ] &&
+    cmp -s "$path" <(printf 'managed by https://github.com/thinkforward-ai/agent-hub\n'); then
+    rm "$path"
+  fi
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --backup-existing) ;;
@@ -28,7 +36,7 @@ done
 for path in "$AGENT_HUB_HOME" "$FACTORY_HOME" "$DEVIN_CONFIG_HOME" "$CLAUDE_HOME"; do
   case "$path" in /*) ;; *) fail "configuration paths must be absolute: $path" ;; esac
 done
-for command in curl tar find cp mktemp gzip; do
+for command in curl tar find cp cmp mktemp gzip awk chmod; do
   command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
 
@@ -37,7 +45,8 @@ if [ -f "$MARKER" ]; then
     fail "managed layout is incomplete; no changes made"
   current="$AGENT_HUB_HOME/current"
   if [ -f "$AGENT_HUB_HOME/AGENTS.md" ] && [ ! -e "$current" ] && [ ! -L "$current" ]; then
-    printf 'Agent Hub is already set up at %s; use manage-skills for changes.\n' "$AGENT_HUB_HOME"
+    retire_ownership_marker
+    printf 'Agent Hub is already set up at %s; use the management skill for changes.\n' "$AGENT_HUB_HOME"
     exit 0
   fi
   [ ! -e "$AGENT_HUB_HOME/AGENTS.md" ] && [ ! -L "$AGENT_HUB_HOME/AGENTS.md" ] &&
@@ -125,6 +134,7 @@ if [ -f "$MARKER" ]; then
       esac
     fi
   fi
+  retire_ownership_marker
   printf 'Verified old release backup: %s\n' "$backup"
   printf 'Agent Hub instructions now live at %s/AGENTS.md\n' "$AGENT_HUB_HOME"
   exit 0
@@ -244,6 +254,36 @@ if [ "$needs_backup" = true ]; then
 fi
 
 mv "$snapshot/skills" "$tmp/core-skills"
+for skill in "$tmp/core-skills"/*; do
+  name="$(basename "$skill")"
+  [[ "$name" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] ||
+    fail "invalid core skill name: $name"
+  grep -Fxq 'source: https://github.com/thinkforward-ai/agent-hub' "$skill/SKILL.md" ||
+    fail "missing core skill source: $name"
+  awk -v name="$name" -v installed="agent-hub-$name" '
+    NR == 1 && $0 != "---" { exit 1 }
+    $0 == "name: " name && !closed && !named {
+      print "name: " installed
+      named = 1
+      next
+    }
+    NR > 1 && $0 == "---" && !closed {
+      if (!named) exit 1
+      print
+      print ""
+      print "Installed by Agent Hub as `" installed "` from `https://github.com/thinkforward-ai/agent-hub`. References to skills from this repository use the same `agent-hub-` prefix."
+      closed = 1
+      next
+    }
+    { print }
+    END { if (!named || !closed) exit 1 }
+  ' "$skill/SKILL.md" >"$tmp/prefixed-skill.md" ||
+    fail "invalid core skill frontmatter: $name"
+  mv "$tmp/prefixed-skill.md" "$skill/SKILL.md"
+  chmod 755 "$skill"
+  chmod 644 "$skill/SKILL.md"
+  mv "$skill" "$tmp/core-skills/agent-hub-$name"
+done
 
 hold_path() {
   local path="$1" index="${#held[@]}"
@@ -277,7 +317,7 @@ if [ ! -e "$AGENT_HUB_HOME/sources.json" ] && [ ! -L "$AGENT_HUB_HOME/sources.js
   created+=("$AGENT_HUB_HOME/sources.json")
 fi
 for path in "${skill_paths[@]}"; do
-  [ -f "$path/manage-skills/SKILL.md" ] || fail "manager skill not visible at $path"
+  [ -f "$path/agent-hub-manage-skills/SKILL.md" ] || fail "manager skill not visible at $path"
 done
 [ -f "$AGENT_HUB_HOME/AGENTS.md" ] || fail "instructions not visible"
 printf 'managed shared skills layout\n' >"$tmp/layout-marker"
@@ -309,6 +349,7 @@ if [ -n "$old_release" ]; then
   rm -rf "$old_release"
   rmdir "$AGENT_HUB_HOME/releases" 2>/dev/null || true
 fi
+retire_ownership_marker
 printf 'Agent Hub skills installed at %s\n' "$AGENT_HUB_HOME/skills"
 printf 'Sources available at %s\n' "$AGENT_HUB_HOME/sources.json"
 if [ -n "$old_release" ]; then
