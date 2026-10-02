@@ -9,3 +9,5 @@ source: https://github.com/thinkforward-ai/agent-hub
 Propose the exact change and get approval before editing.
 
 Include only instructions that change default agent behavior. Use the fewest words possible.
+
+Hand off to another skill by stating its trigger (the situation or need that starts it), not by naming it.
