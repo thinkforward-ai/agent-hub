@@ -2,7 +2,7 @@
 
 This file contains only unresolved questions that currently require investigation or a decision.
 
-**Next question ID:** Q7
+**Next question ID:** Q8
 
 ## Q4: Upstream skill contributions
 
@@ -41,7 +41,7 @@ Linux/macOS symlinks and Windows junctions or file links behave differently; mig
 
 ### Context
 
-Follow-up to [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time skills reset migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only skill source registry](decisions/20261002-2026-url-only-skill-source-registry.md), and [skill source safety review](decisions/20261002-2058-skill-source-safety-review.md).
+Follow-up to [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time skills reset migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only skill source registry](decisions/20261002-2026-url-only-skill-source-registry.md), [skill source safety review](decisions/20261002-2058-skill-source-safety-review.md), and [trusted Agent Hub core installation](decisions/20261002-2152-trusted-agent-hub-core-installation.md).
 
 ### Constraints
 
@@ -52,4 +52,11 @@ Follow-up to [multi-source skill management](decisions/20261002-1759-multi-sourc
 
 - ❓ **Test matrix**
   - **Resolution:** Pending
-  - **Details:** Define supported platform/client combinations and fresh setup, unattended legacy reset, repeat-install no-op, URL-only registry persistence, root `skills/` discovery, source-less skill updates, source URL restrictions, unsafe/incomplete skill reviews, behavioral explanations, separate approvals, managed updates, collision, backup restoration, link reconstruction, and oldest-backup pruning scenarios.
+  - **Details:** Define supported platform/client combinations and no-prompt trusted core setup, unattended legacy reset, repeat-install no-op, URL-only registry persistence, root `skills/` discovery, source-less skill updates, source URL restrictions, unsafe/incomplete skill reviews, behavioral explanations, separate approvals for non-core changes, managed updates, collision, backup restoration, link reconstruction, and oldest-backup pruning scenarios.
+
+### Findings
+
+1. Before the trusted-core exception, twelve temporary offline Linux installer checks passed (fresh approval, legacy reset, backup retention, archive link rejection, source seeding, and rollback). The test file was removed at the user's request.
+2. macOS and Windows runtime validation remains open; PowerShell is unavailable in the current environment.
+3. Skill-only browsing, installation, updates, removal, and behavioral safety review remain unverified.
+4. After the trusted-core exception, a temporary offline Linux check passed for no-prompt fresh setup, hardcoded URL despite an override variable, and repeat-install no-op.

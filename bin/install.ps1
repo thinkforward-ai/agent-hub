@@ -1,280 +1,266 @@
 #!/usr/bin/env pwsh
-
 [CmdletBinding()]
-param(
-    [switch]$BackupExisting,
-    [switch]$Help
-)
+param([switch]$BackupExisting, [switch]$Help)
 
 $ErrorActionPreference = "Stop"
-
-$env:AGENT_HUB_ARCHIVE_URL = if ($env:AGENT_HUB_ARCHIVE_URL) { $env:AGENT_HUB_ARCHIVE_URL } else { "https://github.com/thinkforward-ai/agent-hub/archive/refs/heads/main.tar.gz" }
-$env:AGENT_HUB_HOME = if ($env:AGENT_HUB_HOME) { $env:AGENT_HUB_HOME } else { Join-Path $env:USERPROFILE ".agent-hub" }
-$env:FACTORY_HOME = if ($env:FACTORY_HOME) { $env:FACTORY_HOME } else { Join-Path $env:USERPROFILE ".factory" }
-$env:DEVIN_CONFIG_HOME = if ($env:DEVIN_CONFIG_HOME) { $env:DEVIN_CONFIG_HOME } else { Join-Path $env:USERPROFILE ".config\devin" }
-$env:CLAUDE_CONFIG_DIR = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".claude" }
-
-function Show-Usage {
-    Write-Host @"
-Usage: install.ps1 [-BackupExisting] [-Help]
-
-Install Agent Hub from a clean public snapshot and link Factory, Devin, and Claude Code skills and global instructions to it.
-
-Options:
-  -BackupExisting  Move a conflicting skills or AGENTS.md path to a timestamped backup.
-  -Help            Show this help.
-
-Environment:
-  AGENT_HUB_HOME         Central installation directory (default: ~\.agent-hub)
-  FACTORY_HOME           Factory configuration directory (default: ~\.factory)
-  DEVIN_CONFIG_HOME      Devin configuration directory (default: ~\.config\devin)
-  CLAUDE_CONFIG_DIR      Claude Code configuration directory (default: ~\.claude)
-  AGENT_HUB_ARCHIVE_URL  Snapshot URL (default: public main branch archive)
-"@
-}
-
-function Write-ErrorAndExit {
-    param([string]$Message)
-    $host.UI.WriteErrorLine("Error: $Message")
-    exit 1
-}
-
-# Returns the item at a path without following links, or $null. Unlike
-# Test-Path, this also finds broken links.
-function Get-PathEntry {
-    param([string]$Path)
-    Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
-}
-
-# Returns the target of a junction or symlink, or $null for anything else.
-function Get-LinkTarget {
-    param([string]$Path)
-    $item = Get-PathEntry $Path
-    if ($item -and $item.LinkType) {
-        # Windows PowerShell returns Target as an array.
-        return [string](@($item.Target)[0])
-    }
-    return $null
-}
-
-function Test-SamePath {
-    param([string]$Left, [string]$Right)
-    if (-not $Left -or -not $Right) {
-        return $false
-    }
-    $Left = [System.IO.Path]::GetFullPath($Left).TrimEnd("\")
-    $Right = [System.IO.Path]::GetFullPath($Right).TrimEnd("\")
-    return $Left -eq $Right
-}
-
-# Removes a junction or symlink without touching the directory it points to.
-function Remove-Link {
-    param([string]$Path)
-    $item = Get-PathEntry $Path
-    if ($item -and $item.PSIsContainer) {
-        [System.IO.Directory]::Delete($Path)
-    } elseif ($item) {
-        [System.IO.File]::Delete($Path)
-    }
-}
-
-function Invoke-Native {
-    param([string]$Command, [string[]]$Arguments)
-    & $Command @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        Write-ErrorAndExit "$Command failed with exit code $LASTEXITCODE"
-    }
-}
-
 if ($Help) {
-    Show-Usage
+    Write-Host "Usage: install.ps1 [-BackupExisting] [-Help]"
+    Write-Host "Set up Agent Hub once, or migrate an old skills layout. -BackupExisting is accepted for compatibility."
     exit 0
 }
 
-# Check required commands. Use curl.exe explicitly: in Windows PowerShell,
-# curl is an alias for Invoke-WebRequest.
-$requiredCommands = @("curl.exe", "tar.exe")
-foreach ($cmd in $requiredCommands) {
-    if (-not (Get-Command $cmd -CommandType Application -ErrorAction SilentlyContinue)) {
-        Write-ErrorAndExit "required command not found: $cmd"
+$archiveUrl = "https://github.com/thinkforward-ai/agent-hub/archive/refs/heads/main.tar.gz"
+$hub = if ($env:AGENT_HUB_HOME) { $env:AGENT_HUB_HOME } else { Join-Path $env:USERPROFILE ".agent-hub" }
+$factory = if ($env:FACTORY_HOME) { $env:FACTORY_HOME } else { Join-Path $env:USERPROFILE ".factory" }
+$devin = if ($env:DEVIN_CONFIG_HOME) { $env:DEVIN_CONFIG_HOME } else { Join-Path $env:USERPROFILE ".config\devin" }
+$claude = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $env:USERPROFILE ".claude" }
+foreach ($path in @($hub, $factory, $devin, $claude)) {
+    if (-not [System.IO.Path]::IsPathRooted($path)) { throw "Configuration paths must be absolute: $path" }
+}
+$hub = [System.IO.Path]::GetFullPath($hub)
+$skillPaths = @((Join-Path $factory "skills"), (Join-Path $devin "skills"), (Join-Path $claude "skills"))
+$instructionPaths = @((Join-Path $factory "AGENTS.md"), (Join-Path $devin "AGENTS.md"), (Join-Path $claude "CLAUDE.md"))
+$current = Join-Path $hub "current"
+$marker = Join-Path $hub ".layout-v2"
+
+function Get-Entry([string]$Path) {
+    return Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+}
+function Get-Target([string]$Path) {
+    $item = Get-Entry $Path
+    if ($item -and $item.LinkType) { return [string](@($item.Target)[0]) }
+    return $null
+}
+function Same-Path([string]$Left, [string]$Right) {
+    if (-not $Left -or -not $Right) { return $false }
+    return [System.IO.Path]::GetFullPath($Left).TrimEnd("\") -eq [System.IO.Path]::GetFullPath($Right).TrimEnd("\")
+}
+function Invoke-Native([string]$Command, [string[]]$Arguments) {
+    & $Command @Arguments
+    if ($LASTEXITCODE -ne 0) { throw "$Command failed with exit code $LASTEXITCODE" }
+}
+function Remove-Entry([string]$Path) {
+    $item = Get-Entry $Path
+    if (-not $item) { return }
+    if ($item.LinkType -and $item.PSIsContainer) {
+        [System.IO.Directory]::Delete($Path)
+    } elseif ($item.LinkType) {
+        [System.IO.File]::Delete($Path)
+    } else {
+        Remove-Item -LiteralPath $Path -Recurse -Force
+    }
+}
+function New-DirectoryLink([string]$Path, [string]$Target) {
+    New-Item -ItemType Junction -Path $Path -Target $Target | Out-Null
+}
+
+if (Get-Entry $marker) {
+    if (-not (Test-Path (Join-Path $hub "skills") -PathType Container) -or -not (Get-Target $current)) {
+        throw "Managed layout is incomplete; no changes made"
+    }
+    Write-Host "Agent Hub is already set up at $hub; use manage-skills for changes."
+    exit 0
+}
+if ((Get-Entry $hub) -and -not (Test-Path $hub -PathType Container)) { throw "$hub is not a directory" }
+if ((Test-Path $hub -PathType Container) -and -not (Test-Path (Join-Path $hub ".managed-by-agent-hub"))) {
+    $unmanaged = @(Get-ChildItem -LiteralPath $hub -Force | Where-Object { $_.Name -ne ".env" })
+    if ($unmanaged.Count) { throw "$hub contains unmanaged content: $($unmanaged[0].FullName)" }
+}
+
+$oldRelease = $null
+$oldTarget = Get-Target $current
+if ($oldTarget) {
+    $releases = Join-Path $hub "releases"
+    $oldId = Split-Path $oldTarget -Leaf
+    $oldRelease = Join-Path $releases $oldId
+    if ($oldId -notmatch '^[0-9a-f]{16}$' -or -not (Same-Path $oldTarget $oldRelease) -or
+        -not (Test-Path $oldRelease -PathType Container)) {
+        throw "current points to an unknown release; no changes made"
+    }
+} elseif (Get-Entry $current) { throw "current is not a managed link; no changes made" }
+
+foreach ($path in $instructionPaths) {
+    $item = Get-Entry $path
+    if ($item -and -not (Same-Path (Get-Target $path) (Join-Path $current "AGENTS.md"))) {
+        throw "Unmanaged instructions at $path; no changes made"
+    }
+}
+foreach ($command in @("curl.exe", "tar.exe")) {
+    if (-not (Get-Command $command -CommandType Application -ErrorAction SilentlyContinue)) {
+        throw "Required command not found: $command"
     }
 }
 
-# Validate paths are absolute
-foreach ($var in @("AGENT_HUB_HOME", "FACTORY_HOME", "DEVIN_CONFIG_HOME", "CLAUDE_CONFIG_DIR")) {
-    $value = [Environment]::GetEnvironmentVariable($var)
-    if (-not [System.IO.Path]::IsPathRooted($value)) {
-        Write-ErrorAndExit "$var must be an absolute path"
-    }
-    Set-Item -Path "env:$var" -Value ([System.IO.Path]::GetFullPath($value))
+$tmp = Join-Path ([System.IO.Path]::GetTempPath()) "agent-hub-install-$([Guid]::NewGuid())"
+New-Item -ItemType Directory -Path $tmp | Out-Null
+$held = @()
+$created = @()
+$releaseCreated = $false
+$sharedCreated = $false
+$committed = $false
+$release = $null
+$backup = $null
+
+function Hold-Entry([string]$Path) {
+    if (-not (Get-Entry $Path)) { return }
+    $destination = Join-Path $tmp "held\$($script:held.Count)"
+    Move-Item -LiteralPath $Path -Destination $destination
+    $script:held += [pscustomobject]@{ Original = $Path; Held = $destination }
 }
-$env:FACTORY_SKILLS = Join-Path $env:FACTORY_HOME "skills"
-$env:FACTORY_AGENTS = Join-Path $env:FACTORY_HOME "AGENTS.md"
-$env:DEVIN_SKILLS_HOME = Join-Path $env:DEVIN_CONFIG_HOME "skills"
-$env:DEVIN_AGENTS = Join-Path $env:DEVIN_CONFIG_HOME "AGENTS.md"
-$env:CLAUDE_SKILLS = Join-Path $env:CLAUDE_CONFIG_DIR "skills"
-$env:CLAUDE_INSTRUCTIONS = Join-Path $env:CLAUDE_CONFIG_DIR "CLAUDE.md"
-
-$expectedSkillsTarget = Join-Path $env:AGENT_HUB_HOME "current\skills"
-$expectedAgentsTarget = Join-Path $env:AGENT_HUB_HOME "current\AGENTS.md"
-
-function Test-LinkConflict {
-    param(
-        [string]$TargetPath,
-        [string]$ExpectedTarget,
-        [string]$ResourceName
-    )
-
-    $currentTarget = Get-LinkTarget $TargetPath
-    if ($currentTarget) {
-        if (-not (Test-SamePath $currentTarget $ExpectedTarget) -and -not $BackupExisting) {
-            Write-ErrorAndExit "$ResourceName points to $currentTarget; rerun with -BackupExisting to preserve and replace it"
-        }
-    } elseif (Get-PathEntry $TargetPath) {
-        if (-not $BackupExisting) {
-            Write-ErrorAndExit "$ResourceName already exists; rerun with -BackupExisting to preserve and replace it"
-        }
-    }
-}
-
-Test-LinkConflict $env:FACTORY_SKILLS $expectedSkillsTarget "Factory skills"
-Test-LinkConflict $env:DEVIN_SKILLS_HOME $expectedSkillsTarget "Devin skills"
-Test-LinkConflict $env:FACTORY_AGENTS $expectedAgentsTarget "Factory AGENTS.md"
-Test-LinkConflict $env:DEVIN_AGENTS $expectedAgentsTarget "Devin AGENTS.md"
-Test-LinkConflict $env:CLAUDE_SKILLS $expectedSkillsTarget "Claude Code skills"
-Test-LinkConflict $env:CLAUDE_INSTRUCTIONS $expectedAgentsTarget "Claude Code CLAUDE.md"
-
-if (Test-Path $env:AGENT_HUB_HOME -PathType Leaf) {
-    Write-ErrorAndExit "$env:AGENT_HUB_HOME exists and is not a directory"
-}
-
-if (Test-Path $env:AGENT_HUB_HOME -PathType Container) {
-    $managedFile = Join-Path $env:AGENT_HUB_HOME ".managed-by-agent-hub"
-    if (-not (Test-Path $managedFile)) {
-        $unmanagedFiles = Get-ChildItem $env:AGENT_HUB_HOME -Force | Where-Object { 
-            $_.Name -ne ".env" -and $_.Name -ne ".managed-by-agent-hub" 
-        }
-        if ($unmanagedFiles) {
-            Write-ErrorAndExit "$env:AGENT_HUB_HOME contains unmanaged content: $($unmanagedFiles[0].FullName)"
-        }
-    }
-}
-
-$tmpDir = Join-Path $env:TEMP "agent-hub-install-$([Guid]::NewGuid())"
-New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
-
 try {
-    $archive = Join-Path $tmpDir "agent-hub.tar.gz"
-    $extracted = Join-Path $tmpDir "snapshot"
-    New-Item -ItemType Directory -Path $extracted -Force | Out-Null
-
-    Write-Host "Downloading Agent Hub snapshot..."
-    Invoke-Native "curl.exe" @("--fail", "--location", "--silent", "--show-error", $env:AGENT_HUB_ARCHIVE_URL, "--output", $archive)
-    Invoke-Native "tar.exe" @("-xzf", $archive, "--strip-components=1", "--directory", $extracted)
-
-    $skillsDir = Join-Path $extracted "skills"
-    if (-not (Test-Path $skillsDir -PathType Container)) {
-        Write-ErrorAndExit "snapshot does not contain a skills directory"
+    $archive = Join-Path $tmp "agent-hub.tar.gz"
+    $snapshot = Join-Path $tmp "snapshot"
+    New-Item -ItemType Directory -Path $snapshot | Out-Null
+    Invoke-Native "curl.exe" @("--fail", "--location", "--silent", "--show-error", $archiveUrl, "--output", $archive)
+    $members = & tar.exe -tzf $archive
+    if ($LASTEXITCODE -ne 0) { throw "Cannot read downloaded archive" }
+    foreach ($member in $members) {
+        if ($member -match '(^/|(^|/)\.\.(/|$))') { throw "Unsafe archive path" }
     }
-
-    $skillFiles = Get-ChildItem $skillsDir -Recurse -Filter "SKILL.md" -Depth 1
-    if (-not $skillFiles) {
-        Write-ErrorAndExit "snapshot does not contain any skills"
+    $listing = & tar.exe -tvzf $archive
+    if ($LASTEXITCODE -ne 0 -or @($listing | Where-Object { $_ -match '^[lh]' }).Count) {
+        throw "Snapshot contains links or cannot be inspected"
     }
-
-    $agentsFile = Join-Path $extracted "AGENTS.md"
-    if (-not (Test-Path $agentsFile -PathType Leaf)) {
-        Write-ErrorAndExit "snapshot does not contain AGENTS.md"
+    Invoke-Native "tar.exe" @("-xzf", $archive, "--strip-components=1", "--directory", $snapshot)
+    $core = Join-Path $snapshot "skills"
+    if (-not (Test-Path (Join-Path $snapshot "AGENTS.md") -PathType Leaf) -or
+        -not (Test-Path (Join-Path $snapshot "sources.json") -PathType Leaf) -or
+        -not (Test-Path (Join-Path $core "manage-skills\SKILL.md") -PathType Leaf)) {
+        throw "Snapshot lacks Agent Hub instructions, sources, or manager skill"
     }
-
-    $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.Substring(0, 16)
-    $releaseDir = Join-Path $env:AGENT_HUB_HOME "releases\$hash"
-    $oldRelease = $null
-
-    $currentLink = Join-Path $env:AGENT_HUB_HOME "current"
-    $oldRelease = Get-LinkTarget $currentLink
-    if (-not $oldRelease -and (Get-PathEntry $currentLink)) {
-        Write-ErrorAndExit "$env:AGENT_HUB_HOME\current exists and is not a managed symlink"
-    }
-
-    $releasesDir = Join-Path $env:AGENT_HUB_HOME "releases"
-    New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
-    "managed by https://github.com/thinkforward-ai/agent-hub" | Out-File -FilePath (Join-Path $env:AGENT_HUB_HOME ".managed-by-agent-hub") -Encoding utf8
-
-    if (-not (Test-Path $releaseDir -PathType Container)) {
-        Move-Item $extracted $releaseDir
-    }
-
-    # Replace the current junction. Remove-Link deletes only the link, never
-    # the release it points to.
-    Remove-Link $currentLink
-    New-Item -ItemType Junction -Path $currentLink -Target $releaseDir | Out-Null
-
-    function New-Symlink {
-        param(
-            [string]$TargetPath,
-            [string]$ExpectedTarget,
-            [string]$ParentDir,
-            [string]$ResourceName
-        )
-
-        New-Item -ItemType Directory -Path $ParentDir -Force | Out-Null
-        if (Get-PathEntry $TargetPath) {
-            if (-not (Test-SamePath (Get-LinkTarget $TargetPath) $ExpectedTarget)) {
-                $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
-                $backup = "$TargetPath.backup.$timestamp"
-                while (Get-PathEntry $backup) {
-                    $backup = "$backup.$(Get-Random)"
-                }
-                Move-Item -LiteralPath $TargetPath -Destination $backup
-                Write-Host "Preserved existing $ResourceName at $backup"
-            }
+    $folders = @(Get-ChildItem -LiteralPath $core -Directory)
+    foreach ($folder in $folders) {
+        if (-not (Test-Path (Join-Path $folder.FullName "SKILL.md") -PathType Leaf)) {
+            throw "Invalid core skill: $($folder.Name)"
         }
+    }
+    $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.Substring(0, 16).ToLowerInvariant()
+    $release = Join-Path $hub "releases\v2-$hash"
+    if (Get-Entry $release) { throw "Release exists without a completed installation" }
+    New-Item -ItemType Directory -Path $hub -Force | Out-Null
+    $managedFile = Join-Path $hub ".managed-by-agent-hub"
+    if (-not (Get-Entry $managedFile)) {
+        "managed by https://github.com/thinkforward-ai/agent-hub" | Set-Content -LiteralPath $managedFile
+    }
 
-        if (-not (Get-PathEntry $TargetPath)) {
-            if (Test-Path -LiteralPath $ExpectedTarget -PathType Container) {
-                # Junctions work for directories without extra privileges.
-                New-Item -ItemType Junction -Path $TargetPath -Target $ExpectedTarget | Out-Null
+    $needsBackup = [bool]$oldRelease
+    foreach ($path in @($skillPaths) + @((Join-Path $hub "skills"))) {
+        if (Get-Entry $path) { $needsBackup = $true }
+    }
+    if ($needsBackup) {
+        $backupFolder = Join-Path $tmp "backup"
+        New-Item -ItemType Directory -Path (Join-Path $backupFolder "paths") -Force | Out-Null
+        if ($oldRelease) {
+            Copy-Item -LiteralPath $oldRelease -Destination (Join-Path $backupFolder "legacy-release") -Recurse
+            $oldTarget | Set-Content -LiteralPath (Join-Path $backupFolder "current.target")
+        }
+        for ($i = 0; $i -lt $skillPaths.Count; $i++) {
+            $path = $skillPaths[$i]
+            $entry = Get-Entry $path
+            if (-not $entry) { continue }
+            if ($entry.LinkType) {
+                (Get-Target $path) | Set-Content -LiteralPath (Join-Path $backupFolder "paths\$i.target")
             } else {
-                # Files need a symbolic link, which requires Developer Mode or
-                # an elevated shell on Windows.
-                try {
-                    New-Item -ItemType SymbolicLink -Path $TargetPath -Target $ExpectedTarget | Out-Null
-                } catch {
-                    Write-ErrorAndExit "cannot create symbolic link for $ResourceName at ${TargetPath}: enable Windows Developer Mode or run as administrator"
-                }
+                Copy-Item -LiteralPath $path -Destination (Join-Path $backupFolder "paths\$i") -Recurse
+            }
+            $path | Set-Content -LiteralPath (Join-Path $backupFolder "paths\$i.path")
+        }
+        $shared = Join-Path $hub "skills"
+        $sharedEntry = Get-Entry $shared
+        if ($sharedEntry) {
+            if ($sharedEntry.LinkType) {
+                (Get-Target $shared) | Set-Content -LiteralPath (Join-Path $backupFolder "shared.target")
+            } else {
+                Copy-Item -LiteralPath $shared -Destination (Join-Path $backupFolder "shared-skills") -Recurse
             }
         }
+        $backupDir = Join-Path $hub "backups"
+        New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+        $backup = Join-Path $backupDir "version-$((Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss'))-$([Guid]::NewGuid()).tar.gz"
+        Invoke-Native "tar.exe" @("-czf", $backup, "-C", $backupFolder, ".")
+        Invoke-Native "tar.exe" @("-tzf", $backup)
+        Write-Host "Verified old skills backup: $backup"
     }
 
-    New-Symlink $env:FACTORY_SKILLS $expectedSkillsTarget $env:FACTORY_HOME "Factory skills"
-    New-Symlink $env:DEVIN_SKILLS_HOME $expectedSkillsTarget $env:DEVIN_CONFIG_HOME "Devin skills"
-    New-Symlink $env:FACTORY_AGENTS $expectedAgentsTarget $env:FACTORY_HOME "Factory AGENTS.md"
-    New-Symlink $env:DEVIN_AGENTS $expectedAgentsTarget $env:DEVIN_CONFIG_HOME "Devin AGENTS.md"
-    New-Symlink $env:CLAUDE_SKILLS $expectedSkillsTarget $env:CLAUDE_CONFIG_DIR "Claude Code skills"
-    New-Symlink $env:CLAUDE_INSTRUCTIONS $expectedAgentsTarget $env:CLAUDE_CONFIG_DIR "Claude Code CLAUDE.md"
+    $releasesDir = Join-Path $hub "releases"
+    New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
+    $coreStage = Join-Path $tmp "core-skills"
+    Move-Item -LiteralPath $core -Destination $coreStage
+    Hold-Entry (Join-Path $hub "skills")
+    Move-Item -LiteralPath $coreStage -Destination (Join-Path $hub "skills")
+    $sharedCreated = $true
+    New-DirectoryLink $core (Join-Path $hub "skills")
+    Move-Item -LiteralPath $snapshot -Destination $release
+    $releaseCreated = $true
 
-    # Clean up old release
-    if ($oldRelease) {
-        $oldReleaseId = Split-Path $oldRelease -Leaf
-        if ($oldReleaseId -match "^[0-9a-f]{16}$" -and $oldReleaseId -ne $hash) {
-            $oldReleasePath = Join-Path $releasesDir $oldReleaseId
-            if (Test-Path $oldReleasePath) {
-                Remove-Item $oldReleasePath -Recurse -Force
+    foreach ($path in $skillPaths) {
+        New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
+        Hold-Entry $path
+        New-DirectoryLink $path (Join-Path $hub "skills")
+        $created += $path
+    }
+    Hold-Entry $current
+    New-DirectoryLink $current $release
+    $created += $current
+    foreach ($path in $instructionPaths) {
+        if (-not (Get-Entry $path)) {
+            New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
+            try {
+                New-Item -ItemType SymbolicLink -Path $path -Target (Join-Path $current "AGENTS.md") | Out-Null
+            } catch {
+                throw "Cannot link instructions at ${path}; enable Developer Mode or use an elevated shell"
             }
+            $created += $path
         }
     }
+    $sources = Join-Path $hub "sources.json"
+    if (-not (Get-Entry $sources)) {
+        Copy-Item -LiteralPath (Join-Path $release "sources.json") -Destination $sources
+        $created += $sources
+    }
+    foreach ($path in $skillPaths) {
+        if (-not (Test-Path (Join-Path $path "manage-skills\SKILL.md") -PathType Leaf)) {
+            throw "Manager skill not visible at $path"
+        }
+    }
+    if (-not (Test-Path (Join-Path $current "AGENTS.md") -PathType Leaf)) {
+        throw "Instructions not visible"
+    }
+    "managed shared skills layout" | Set-Content -LiteralPath $marker
+    $committed = $true
 
-    Write-Host "Agent Hub installed at $env:AGENT_HUB_HOME\current"
-    Write-Host "Factory skills linked at $env:FACTORY_SKILLS"
-    Write-Host "Devin skills linked at $env:DEVIN_SKILLS_HOME"
-    Write-Host "Factory AGENTS.md linked at $env:FACTORY_AGENTS"
-    Write-Host "Devin AGENTS.md linked at $env:DEVIN_AGENTS"
-    Write-Host "Claude Code skills linked at $env:CLAUDE_SKILLS"
-    Write-Host "Claude Code CLAUDE.md linked at $env:CLAUDE_INSTRUCTIONS"
-
+    if ($backup) {
+        $list = Join-Path $hub "backups\managed.list"
+        (Split-Path $backup -Leaf) | Add-Content -LiteralPath $list
+        $names = @(Get-Content -LiteralPath $list)
+        while ($names.Count -gt 2) {
+            $oldest = $names[0]
+            if ($oldest -match '^version-.*\.tar\.gz$') {
+                Remove-Item -LiteralPath (Join-Path (Split-Path $list -Parent) $oldest) -Force
+            }
+            $names = @($names | Select-Object -Skip 1)
+        }
+        $names | Set-Content -LiteralPath $list
+    }
+    if ($oldRelease) { Remove-Item -LiteralPath $oldRelease -Recurse -Force }
+    Write-Host "Agent Hub skills installed at $(Join-Path $hub 'skills')"
+    Write-Host "Sources available at $sources"
+    if ($oldRelease) { Write-Host "Legacy skills are no longer active; recover them from the backup if needed." }
 } finally {
-    if (Test-Path $tmpDir) {
-        Remove-Item $tmpDir -Recurse -Force
+    if (-not $committed) {
+        if (Get-Entry $marker) { Remove-Entry $marker }
+        $stagedLink = Join-Path $snapshot "skills"
+        if ((Get-Entry $stagedLink).LinkType) { Remove-Entry $stagedLink }
+        if ($releaseCreated) {
+            $skillLink = Join-Path $release "skills"
+            if ((Get-Entry $skillLink).LinkType) { Remove-Entry $skillLink }
+        }
+        foreach ($path in $created) { Remove-Entry $path }
+        if ($sharedCreated) { Remove-Entry (Join-Path $hub "skills") }
+        for ($i = $held.Count - 1; $i -ge 0; $i--) {
+            Move-Item -LiteralPath $held[$i].Held -Destination $held[$i].Original
+        }
+        if ($releaseCreated) { Remove-Entry $release }
     }
+    Remove-Item -LiteralPath $tmp -Recurse -Force
 }

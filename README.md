@@ -8,11 +8,7 @@ Shared agent skills and global instructions installed from one central copy.
 curl -fsSL https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/bin/install.sh | bash
 ```
 
-To preserve existing files before replacement:
-
-```bash
-bash install.sh --backup-existing
-```
+The installer makes a verified compressed backup before replacing a legacy skills layout. It does not need an extra flag.
 
 ## Install on Windows
 
@@ -20,15 +16,11 @@ bash install.sh --backup-existing
 irm https://raw.githubusercontent.com/thinkforward-ai/agent-hub/main/bin/install.ps1 | iex
 ```
 
-To preserve existing files before replacement:
-
-```powershell
-.\install.ps1 -BackupExisting
-```
+The installer makes a verified compressed backup before replacing a legacy skills layout. It does not need an extra switch.
 
 ## What the installer does
 
-The installer downloads a clean snapshot to `~/.agent-hub` and creates symlinks to:
+The installer downloads a clean snapshot to `~/.agent-hub`, seeds the editable `~/.agent-hub/sources.json` from the bundled [`sources.json`](sources.json), and links a shared `~/.agent-hub/skills` directory to:
 
 - **Skills:**
   - `~/.factory/skills` (Factory)
@@ -40,15 +32,18 @@ The installer downloads a clean snapshot to `~/.agent-hub` and creates symlinks 
   - `~/.config/devin/AGENTS.md` (Devin CLI)
   - `~/.claude/CLAUDE.md` (Claude Code, which reads `CLAUDE.md` instead of `AGENTS.md`)
 
-If any of these paths already exist, the installer will fail unless you use the backup option.
+Fresh setup installs Agent Hub core skills without prompts from the hardcoded official archive. Existing instruction files that do not belong to Agent Hub are never replaced.
+On Windows, creating instruction file links requires Developer Mode or an elevated shell.
 
-## Updating
+## Migrating a legacy installation
 
-Run the installer again to update the central snapshot. Existing `~/.agent-hub/.env` content is preserved.
+Run the same installer command. It verifies a compressed backup of the previous release and skill paths before switching to the new layout. Old skills, including `synced/`, are no longer active; recover them from the backup if needed. Existing `~/.agent-hub/.env`, instructions, and source URLs stay in place. Only the two most recent installer-managed version backups are retained.
 
-## Planned skill management
+## After installation
 
-The current installer still links the entire skills directory and does not support selecting individual skills or adding sources. Bundled defaults in [`sources.json`](sources.json) list Agent Hub and project-guide, but the installer does not use them yet. The accepted [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only source registry](decisions/20261002-2026-url-only-skill-source-registry.md), and [safety review](decisions/20261002-2058-skill-source-safety-review.md) decisions describe the remaining intended design. In the future, the installer will set up or migrate skills once, and a management skill will handle later changes.
+Use the `manage-skills` skill to browse sources and to review, install, remove, or update skills. Rerunning the installer on an already managed layout makes no skill changes.
+
+The design is recorded in [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only source registry](decisions/20261002-2026-url-only-skill-source-registry.md), [safety review](decisions/20261002-2058-skill-source-safety-review.md), and [trusted core installation](decisions/20261002-2152-trusted-agent-hub-core-installation.md).
 
 ## Instruction Hierarchy
 
