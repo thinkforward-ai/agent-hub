@@ -20,7 +20,7 @@ The installer makes a verified compressed backup before replacing a legacy skill
 
 ## What the installer does
 
-The installer downloads a clean snapshot to `~/.agent-hub`, seeds the editable `~/.agent-hub/sources.json` from the bundled [`sources.json`](sources.json), and links a shared `~/.agent-hub/skills` directory to:
+The installer downloads a clean snapshot, installs `AGENTS.md` directly at `~/.agent-hub/AGENTS.md`, seeds the editable `~/.agent-hub/sources.json` from the bundled [`sources.json`](sources.json), and links `~/.agent-hub/skills` to:
 
 - **Skills:**
   - `~/.factory/skills` (Factory)
@@ -37,11 +37,11 @@ On Windows, creating instruction file links requires Developer Mode or an elevat
 
 ## Migrating a legacy installation
 
-Run the same installer command. It verifies a compressed backup of the previous release and skill paths before switching to the new layout. Old skills, including `synced/`, are no longer active; recover them from the backup if needed. Existing `~/.agent-hub/.env`, instructions, and source URLs stay in place. Only the two most recent installer-managed version backups are retained.
+Run the same installer command. For legacy skills, it verifies a compressed backup of the previous release and skill paths before switching to the new layout. Old skills, including `synced/`, are no longer active; recover them from the backup if needed. For an already-managed installation with a `current` link, it backs up that release and moves only instruction links, without changing installed skills. Existing `~/.agent-hub/.env` and source URLs stay in place. Only the two most recent installer-managed version backups are retained.
 
 ## After installation
 
-Use the `manage-skills` skill to browse sources and to review, install, remove, or update skills. Rerunning the installer on an already managed layout makes no skill changes.
+Use the `manage-skills` skill to browse sources and to review, install, remove, or update skills. Rerunning the installer on the new layout makes no changes.
 
 The design is recorded in [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only source registry](decisions/20261002-2026-url-only-skill-source-registry.md), [safety review](decisions/20261002-2058-skill-source-safety-review.md), and [trusted core installation](decisions/20261002-2152-trusted-agent-hub-core-installation.md).
 
@@ -49,7 +49,7 @@ The design is recorded in [multi-source skill management](decisions/20261002-175
 
 Agent Hub follows this instruction hierarchy:
 
-1. `~/.agent-hub/current/AGENTS.md` — Universal behavior (all projects)
+1. `~/.agent-hub/AGENTS.md` — Universal behavior (all projects)
 2. `project/AGENTS.md` — Project-specific rules
 3. `project/subdirectory/AGENTS.md` — Area-specific refinements
 

@@ -21,6 +21,7 @@ $hub = [System.IO.Path]::GetFullPath($hub)
 $skillPaths = @((Join-Path $factory "skills"), (Join-Path $devin "skills"), (Join-Path $claude "skills"))
 $instructionPaths = @((Join-Path $factory "AGENTS.md"), (Join-Path $devin "AGENTS.md"), (Join-Path $claude "CLAUDE.md"))
 $current = Join-Path $hub "current"
+$instructions = Join-Path $hub "AGENTS.md"
 $marker = Join-Path $hub ".layout-v2"
 
 function Get-Entry([string]$Path) {
@@ -53,12 +54,109 @@ function Remove-Entry([string]$Path) {
 function New-DirectoryLink([string]$Path, [string]$Target) {
     New-Item -ItemType Junction -Path $Path -Target $Target | Out-Null
 }
+function Hold-Entry([string]$Path) {
+    if (-not (Get-Entry $Path)) { return }
+    $destination = Join-Path $tmp "held\$($script:held.Count)"
+    Move-Item -LiteralPath $Path -Destination $destination
+    $script:held += [pscustomobject]@{ Original = $Path; Held = $destination }
+}
 
 if (Get-Entry $marker) {
-    if (-not (Test-Path (Join-Path $hub "skills") -PathType Container) -or -not (Get-Target $current)) {
+    if (-not (Test-Path (Join-Path $hub "skills") -PathType Container)) {
         throw "Managed layout is incomplete; no changes made"
     }
-    Write-Host "Agent Hub is already set up at $hub; use manage-skills for changes."
+    if ((Test-Path $instructions -PathType Leaf) -and -not (Get-Entry $current)) {
+        Write-Host "Agent Hub is already set up at $hub; use manage-skills for changes."
+        exit 0
+    }
+    if ((Get-Entry $instructions) -or -not (Get-Target $current)) { throw "Managed instructions are incomplete; no changes made" }
+    $oldTarget = Get-Target $current
+    $oldId = Split-Path $oldTarget -Leaf
+    $releasesDir = Join-Path $hub "releases"
+    $oldRelease = Join-Path $releasesDir $oldId
+    if (-not (Test-Path $releasesDir -PathType Container) -or (Get-Entry $releasesDir).LinkType -or
+        $oldId -notmatch '^v2-[0-9a-f]{16}$' -or -not (Same-Path $oldTarget $oldRelease) -or
+        -not (Test-Path (Join-Path $oldRelease "AGENTS.md") -PathType Leaf) -or
+        -not (Same-Path (Get-Target (Join-Path $oldRelease "skills")) (Join-Path $hub "skills"))) {
+        throw "Managed release is incomplete; no changes made"
+    }
+    foreach ($path in $instructionPaths) {
+        if (-not (Same-Path (Get-Target $path) (Join-Path $current "AGENTS.md"))) {
+            throw "Unmanaged instructions at $path; no changes made"
+        }
+    }
+    if (-not (Get-Command tar.exe -CommandType Application -ErrorAction SilentlyContinue)) {
+        throw "Required command not found: tar.exe"
+    }
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "agent-hub-migrate-$([Guid]::NewGuid())"
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $tmp "held") | Out-Null
+    $held = @()
+    $created = @()
+    $committed = $false
+    try {
+        $backupFolder = Join-Path $tmp "backup"
+        New-Item -ItemType Directory -Path $backupFolder | Out-Null
+        Copy-Item -LiteralPath $oldRelease -Destination (Join-Path $backupFolder "managed-release") -Recurse
+        $oldTarget | Set-Content -LiteralPath (Join-Path $backupFolder "current.target")
+        foreach ($path in $instructionPaths) {
+            (Get-Target $path) | Add-Content -LiteralPath (Join-Path $backupFolder "instructions.target")
+        }
+        $backupDir = Join-Path $hub "backups"
+        New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+        $backup = Join-Path $backupDir "version-$((Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss'))-$([Guid]::NewGuid()).tar.gz"
+        Invoke-Native "tar.exe" @("-czf", $backup, "-C", $backupFolder, ".")
+        Invoke-Native "tar.exe" @("-tzf", $backup)
+        Copy-Item -LiteralPath (Join-Path $oldRelease "AGENTS.md") -Destination $instructions
+        $created += $instructions
+        foreach ($path in $instructionPaths) {
+            Hold-Entry $path
+            try {
+                New-Item -ItemType SymbolicLink -Path $path -Target $instructions | Out-Null
+            } catch {
+                throw "Cannot link instructions at ${path}; enable Developer Mode or use an elevated shell"
+            }
+            $created += $path
+        }
+        foreach ($path in $instructionPaths) {
+            if (-not (Test-Path $path -PathType Leaf)) { throw "Instructions not visible at $path" }
+        }
+        Hold-Entry $current
+        Hold-Entry $oldRelease
+        $committed = $true
+        $releasesDir = Join-Path $hub "releases"
+        if (-not @(Get-ChildItem -LiteralPath $releasesDir -Force).Count) {
+            Remove-Item -LiteralPath $releasesDir
+        }
+        $list = Join-Path $backupDir "managed.list"
+        (Split-Path $backup -Leaf) | Add-Content -LiteralPath $list
+        $names = @(Get-Content -LiteralPath $list)
+        while ($names.Count -gt 2) {
+            $oldest = $names[0]
+            if ($oldest -match '^version-.*\.tar\.gz$') {
+                Remove-Item -LiteralPath (Join-Path $backupDir $oldest) -Force
+            }
+            $names = @($names | Select-Object -Skip 1)
+        }
+        $names | Set-Content -LiteralPath $list
+        Write-Host "Verified old release backup: $backup"
+        Write-Host "Agent Hub instructions now live at $instructions"
+    } finally {
+        if (-not $committed) {
+            foreach ($path in $created) { Remove-Entry $path }
+            for ($i = $held.Count - 1; $i -ge 0; $i--) {
+                Move-Item -LiteralPath $held[$i].Held -Destination $held[$i].Original
+            }
+        } else {
+            foreach ($entry in $held) {
+                if ($entry.Original -eq $oldRelease) {
+                    $oldSkillLink = Join-Path $entry.Held "skills"
+                    if ((Get-Entry $oldSkillLink).LinkType) { Remove-Entry $oldSkillLink }
+                }
+            }
+        }
+        Remove-Item -LiteralPath $tmp -Recurse -Force
+    }
     exit 0
 }
 if ((Get-Entry $hub) -and -not (Test-Path $hub -PathType Container)) { throw "$hub is not a directory" }
@@ -68,6 +166,8 @@ if ((Test-Path $hub -PathType Container) -and -not (Test-Path (Join-Path $hub ".
 }
 
 $oldRelease = $null
+$existingInstructions = Get-Entry $instructions
+if ($existingInstructions) { throw "Instructions already exist at $instructions; no changes made" }
 $oldTarget = Get-Target $current
 if ($oldTarget) {
     $releases = Join-Path $hub "releases"
@@ -95,19 +195,11 @@ $tmp = Join-Path ([System.IO.Path]::GetTempPath()) "agent-hub-install-$([Guid]::
 New-Item -ItemType Directory -Path $tmp | Out-Null
 $held = @()
 $created = @()
-$releaseCreated = $false
 $sharedCreated = $false
 $committed = $false
-$release = $null
 $backup = $null
-
-function Hold-Entry([string]$Path) {
-    if (-not (Get-Entry $Path)) { return }
-    $destination = Join-Path $tmp "held\$($script:held.Count)"
-    Move-Item -LiteralPath $Path -Destination $destination
-    $script:held += [pscustomobject]@{ Original = $Path; Held = $destination }
-}
 try {
+
     $archive = Join-Path $tmp "agent-hub.tar.gz"
     $snapshot = Join-Path $tmp "snapshot"
     New-Item -ItemType Directory -Path $snapshot | Out-Null
@@ -134,9 +226,6 @@ try {
             throw "Invalid core skill: $($folder.Name)"
         }
     }
-    $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.Substring(0, 16).ToLowerInvariant()
-    $release = Join-Path $hub "releases\v2-$hash"
-    if (Get-Entry $release) { throw "Release exists without a completed installation" }
     New-Item -ItemType Directory -Path $hub -Force | Out-Null
     $managedFile = Join-Path $hub ".managed-by-agent-hub"
     if (-not (Get-Entry $managedFile)) {
@@ -182,16 +271,13 @@ try {
         Write-Host "Verified old skills backup: $backup"
     }
 
-    $releasesDir = Join-Path $hub "releases"
-    New-Item -ItemType Directory -Path $releasesDir -Force | Out-Null
     $coreStage = Join-Path $tmp "core-skills"
     Move-Item -LiteralPath $core -Destination $coreStage
     Hold-Entry (Join-Path $hub "skills")
     Move-Item -LiteralPath $coreStage -Destination (Join-Path $hub "skills")
     $sharedCreated = $true
-    New-DirectoryLink $core (Join-Path $hub "skills")
-    Move-Item -LiteralPath $snapshot -Destination $release
-    $releaseCreated = $true
+    Copy-Item -LiteralPath (Join-Path $snapshot "AGENTS.md") -Destination $instructions
+    $created += $instructions
 
     foreach ($path in $skillPaths) {
         New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
@@ -200,22 +286,19 @@ try {
         $created += $path
     }
     Hold-Entry $current
-    New-DirectoryLink $current $release
-    $created += $current
     foreach ($path in $instructionPaths) {
-        if (-not (Get-Entry $path)) {
-            New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
-            try {
-                New-Item -ItemType SymbolicLink -Path $path -Target (Join-Path $current "AGENTS.md") | Out-Null
-            } catch {
-                throw "Cannot link instructions at ${path}; enable Developer Mode or use an elevated shell"
-            }
-            $created += $path
+        New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
+        Hold-Entry $path
+        try {
+            New-Item -ItemType SymbolicLink -Path $path -Target $instructions | Out-Null
+        } catch {
+            throw "Cannot link instructions at ${path}; enable Developer Mode or use an elevated shell"
         }
+        $created += $path
     }
     $sources = Join-Path $hub "sources.json"
     if (-not (Get-Entry $sources)) {
-        Copy-Item -LiteralPath (Join-Path $release "sources.json") -Destination $sources
+        Copy-Item -LiteralPath (Join-Path $snapshot "sources.json") -Destination $sources
         $created += $sources
     }
     foreach ($path in $skillPaths) {
@@ -223,7 +306,7 @@ try {
             throw "Manager skill not visible at $path"
         }
     }
-    if (-not (Test-Path (Join-Path $current "AGENTS.md") -PathType Leaf)) {
+    if (-not (Test-Path $instructions -PathType Leaf)) {
         throw "Instructions not visible"
     }
     "managed shared skills layout" | Set-Content -LiteralPath $marker
@@ -242,25 +325,25 @@ try {
         }
         $names | Set-Content -LiteralPath $list
     }
-    if ($oldRelease) { Remove-Item -LiteralPath $oldRelease -Recurse -Force }
+    if ($oldRelease) {
+        Remove-Item -LiteralPath $oldRelease -Recurse -Force
+        $releasesDir = Join-Path $hub "releases"
+        if ((Test-Path $releasesDir -PathType Container) -and
+            -not @(Get-ChildItem -LiteralPath $releasesDir -Force).Count) {
+            Remove-Item -LiteralPath $releasesDir
+        }
+    }
     Write-Host "Agent Hub skills installed at $(Join-Path $hub 'skills')"
     Write-Host "Sources available at $sources"
     if ($oldRelease) { Write-Host "Legacy skills are no longer active; recover them from the backup if needed." }
 } finally {
     if (-not $committed) {
         if (Get-Entry $marker) { Remove-Entry $marker }
-        $stagedLink = Join-Path $snapshot "skills"
-        if ((Get-Entry $stagedLink).LinkType) { Remove-Entry $stagedLink }
-        if ($releaseCreated) {
-            $skillLink = Join-Path $release "skills"
-            if ((Get-Entry $skillLink).LinkType) { Remove-Entry $skillLink }
-        }
         foreach ($path in $created) { Remove-Entry $path }
         if ($sharedCreated) { Remove-Entry (Join-Path $hub "skills") }
         for ($i = $held.Count - 1; $i -ge 0; $i--) {
             Move-Item -LiteralPath $held[$i].Held -Destination $held[$i].Original
         }
-        if ($releaseCreated) { Remove-Entry $release }
     }
     Remove-Item -LiteralPath $tmp -Recurse -Force
 }

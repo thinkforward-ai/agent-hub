@@ -31,18 +31,102 @@ done
 for command in curl tar find cp mktemp gzip; do
   command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
-if command -v sha256sum >/dev/null 2>&1; then
-  hash_file() { sha256sum "$1" | cut -c1-16; }
-elif command -v shasum >/dev/null 2>&1; then
-  hash_file() { shasum -a 256 "$1" | cut -c1-16; }
-else
-  fail "required command not found: sha256sum or shasum"
-fi
 
 if [ -f "$MARKER" ]; then
-  [ -d "$AGENT_HUB_HOME/skills" ] && [ -L "$AGENT_HUB_HOME/current" ] ||
+  [ -d "$AGENT_HUB_HOME/skills" ] ||
     fail "managed layout is incomplete; no changes made"
-  printf 'Agent Hub is already set up at %s; use manage-skills for changes.\n' "$AGENT_HUB_HOME"
+  current="$AGENT_HUB_HOME/current"
+  if [ -f "$AGENT_HUB_HOME/AGENTS.md" ] && [ ! -e "$current" ] && [ ! -L "$current" ]; then
+    printf 'Agent Hub is already set up at %s; use manage-skills for changes.\n' "$AGENT_HUB_HOME"
+    exit 0
+  fi
+  [ ! -e "$AGENT_HUB_HOME/AGENTS.md" ] && [ ! -L "$AGENT_HUB_HOME/AGENTS.md" ] &&
+    [ -L "$current" ] || fail "managed instructions are incomplete; no changes made"
+  old_target="$(readlink "$current")"
+  case "$old_target" in releases/v2-*) ;; *) fail "unknown managed release; no changes made" ;; esac
+  old_id="${old_target#releases/v2-}"
+  [ "${#old_id}" -eq 16 ] && [[ "$old_id" != *[!0-9a-f]* ]] ||
+    fail "unknown managed release; no changes made"
+  [ -d "$AGENT_HUB_HOME/releases" ] && [ ! -L "$AGENT_HUB_HOME/releases" ] ||
+    fail "managed releases directory is unsafe; no changes made"
+  old_release="$AGENT_HUB_HOME/$old_target"
+  [ -d "$old_release" ] && [ ! -L "$old_release" ] &&
+    [ -f "$old_release/AGENTS.md" ] &&
+    [ -L "$old_release/skills" ] &&
+    [ "$(readlink "$old_release/skills")" = "$AGENT_HUB_HOME/skills" ] ||
+    fail "managed release is incomplete; no changes made"
+  instruction_paths=("$FACTORY_HOME/AGENTS.md" "$DEVIN_CONFIG_HOME/AGENTS.md" "$CLAUDE_HOME/CLAUDE.md")
+  for path in "${instruction_paths[@]}"; do
+    [ -L "$path" ] && [ "$(readlink "$path")" = "$current/AGENTS.md" ] ||
+      fail "unmanaged instructions at $path; no changes made"
+  done
+  tmp="$(mktemp -d)"
+  migrated=false
+  replaced=0
+  old_current_held=false
+  old_release_held=false
+  rollback_managed() {
+    if [ "$migrated" != true ]; then
+      if [ "$old_release_held" = true ]; then mv "$tmp/old-release" "$old_release"; fi
+      if [ "$old_current_held" = true ]; then mv "$tmp/current" "$current"; fi
+      for ((i=replaced-1; i>=0; i--)); do
+        rm -f "${instruction_paths[i]}"
+        mv "$tmp/links/$i" "${instruction_paths[i]}"
+      done
+      rm -f "$AGENT_HUB_HOME/AGENTS.md"
+    fi
+    rm -rf "$tmp"
+  }
+  trap rollback_managed EXIT
+  mkdir -p "$tmp/backup" "$tmp/links" "$AGENT_HUB_HOME/backups"
+  cp -a "$old_release" "$tmp/backup/managed-release"
+  cp -a "$current" "$tmp/backup/current"
+  for ((i=0; i<${#instruction_paths[@]}; i++)); do
+    cp -a "${instruction_paths[i]}" "$tmp/backup/instructions-$i"
+  done
+  backup="$AGENT_HUB_HOME/backups/version-$(date -u +%Y%m%d-%H%M%S)-$(basename "$tmp").tar.gz"
+  tar -czf "$backup" -C "$tmp/backup" .
+  gzip -t "$backup"
+  tar -tzf "$backup" >/dev/null
+  cp "$old_release/AGENTS.md" "$tmp/AGENTS.md"
+  mv "$tmp/AGENTS.md" "$AGENT_HUB_HOME/AGENTS.md"
+  for ((i=0; i<${#instruction_paths[@]}; i++)); do
+    mv "${instruction_paths[i]}" "$tmp/links/$i"
+    if ! ln -s "$AGENT_HUB_HOME/AGENTS.md" "${instruction_paths[i]}"; then
+      mv "$tmp/links/$i" "${instruction_paths[i]}"
+      fail "cannot link instructions at ${instruction_paths[i]}"
+    fi
+    replaced=$((replaced+1))
+  done
+  for path in "${instruction_paths[@]}"; do
+    [ -f "$path" ] || fail "instructions not visible at $path"
+  done
+  mv "$current" "$tmp/current"
+  old_current_held=true
+  mv "$old_release" "$tmp/old-release"
+  old_release_held=true
+  migrated=true
+  rmdir "$AGENT_HUB_HOME/releases" 2>/dev/null || true
+  printf '%s\n' "$(basename "$backup")" >>"$AGENT_HUB_HOME/backups/managed.list"
+  if [ -f "$AGENT_HUB_HOME/backups/managed.list" ]; then
+    count=0
+    while IFS= read -r name; do
+      case "$name" in version-*.tar.gz) ;; *) continue ;; esac
+      [ -f "$AGENT_HUB_HOME/backups/$name" ] || continue
+      count=$((count+1))
+    done <"$AGENT_HUB_HOME/backups/managed.list"
+    if [ "$count" -gt 2 ]; then
+      oldest="$(head -n 1 "$AGENT_HUB_HOME/backups/managed.list")"
+      case "$oldest" in version-*.tar.gz)
+        rm -f "$AGENT_HUB_HOME/backups/$oldest"
+        sed '1d' "$AGENT_HUB_HOME/backups/managed.list" >"$tmp/backups.list"
+        mv "$tmp/backups.list" "$AGENT_HUB_HOME/backups/managed.list"
+        ;;
+      esac
+    fi
+  fi
+  printf 'Verified old release backup: %s\n' "$backup"
+  printf 'Agent Hub instructions now live at %s/AGENTS.md\n' "$AGENT_HUB_HOME"
   exit 0
 fi
 [ ! -e "$AGENT_HUB_HOME" ] || [ -d "$AGENT_HUB_HOME" ] ||
@@ -57,6 +141,8 @@ fi
 
 current="$AGENT_HUB_HOME/current"
 old_release=""
+[ ! -e "$AGENT_HUB_HOME/AGENTS.md" ] && [ ! -L "$AGENT_HUB_HOME/AGENTS.md" ] ||
+  fail "instructions already exist at $AGENT_HUB_HOME/AGENTS.md; no changes made"
 if [ -L "$current" ]; then
   old_target="$(readlink "$current")"
   case "$old_target" in
@@ -84,8 +170,6 @@ tmp="$(mktemp -d)"
 held=()
 original=()
 created=()
-release=""
-release_created=false
 shared_created=false
 committed=false
 rollback() {
@@ -98,7 +182,6 @@ rollback() {
       [ ! -e "${held[i]}" ] && [ ! -L "${held[i]}" ] ||
         mv "${held[i]}" "${original[i]}"
     done
-    if [ "$release_created" = true ]; then rm -rf "$release"; fi
   fi
   rm -rf "$tmp"
 }
@@ -125,9 +208,6 @@ for skill in "$snapshot/skills"/*; do
   [ -d "$skill" ] && [ -f "$skill/SKILL.md" ] ||
     fail "invalid core skill: $skill"
 done
-release="$AGENT_HUB_HOME/releases/v2-$(hash_file "$archive")"
-[ ! -e "$release" ] && [ ! -L "$release" ] ||
-  fail "release already exists without a completed installation"
 mkdir -p "$AGENT_HUB_HOME"
 if [ ! -e "$AGENT_HUB_HOME/.managed-by-agent-hub" ]; then
   printf 'managed by https://github.com/thinkforward-ai/agent-hub\n' >"$AGENT_HUB_HOME/.managed-by-agent-hub"
@@ -163,11 +243,7 @@ if [ "$needs_backup" = true ]; then
   printf 'Verified old skills backup: %s\n' "$backup"
 fi
 
-mkdir -p "$AGENT_HUB_HOME/releases"
 mv "$snapshot/skills" "$tmp/core-skills"
-ln -s "$AGENT_HUB_HOME/skills" "$snapshot/skills"
-mv "$snapshot" "$release"
-release_created=true
 
 hold_path() {
   local path="$1" index="${#held[@]}"
@@ -180,6 +256,8 @@ hold_path() {
 hold_path "$AGENT_HUB_HOME/skills"
 mv "$tmp/core-skills" "$AGENT_HUB_HOME/skills"
 shared_created=true
+cp "$snapshot/AGENTS.md" "$AGENT_HUB_HOME/AGENTS.md"
+created+=("$AGENT_HUB_HOME/AGENTS.md")
 
 for path in "${skill_paths[@]}"; do
   mkdir -p "$(dirname "$path")"
@@ -188,23 +266,20 @@ for path in "${skill_paths[@]}"; do
   created+=("$path")
 done
 hold_path "$current"
-ln -s "releases/$(basename "$release")" "$current"
-created+=("$current")
 for path in "${instruction_paths[@]}"; do
-  if [ ! -e "$path" ] && [ ! -L "$path" ]; then
-    mkdir -p "$(dirname "$path")"
-    ln -s "$AGENT_HUB_HOME/current/AGENTS.md" "$path"
-    created+=("$path")
-  fi
+  mkdir -p "$(dirname "$path")"
+  hold_path "$path"
+  ln -s "$AGENT_HUB_HOME/AGENTS.md" "$path"
+  created+=("$path")
 done
 if [ ! -e "$AGENT_HUB_HOME/sources.json" ] && [ ! -L "$AGENT_HUB_HOME/sources.json" ]; then
-  cp "$release/sources.json" "$AGENT_HUB_HOME/sources.json"
+  cp "$snapshot/sources.json" "$AGENT_HUB_HOME/sources.json"
   created+=("$AGENT_HUB_HOME/sources.json")
 fi
 for path in "${skill_paths[@]}"; do
   [ -f "$path/manage-skills/SKILL.md" ] || fail "manager skill not visible at $path"
 done
-[ -f "$current/AGENTS.md" ] || fail "instructions not visible"
+[ -f "$AGENT_HUB_HOME/AGENTS.md" ] || fail "instructions not visible"
 printf 'managed shared skills layout\n' >"$tmp/layout-marker"
 mv "$tmp/layout-marker" "$MARKER"
 committed=true
@@ -230,7 +305,10 @@ if [ -f "$AGENT_HUB_HOME/backups/managed.list" ]; then
     esac
   fi
 fi
-if [ -n "$old_release" ]; then rm -rf "$old_release"; fi
+if [ -n "$old_release" ]; then
+  rm -rf "$old_release"
+  rmdir "$AGENT_HUB_HOME/releases" 2>/dev/null || true
+fi
 printf 'Agent Hub skills installed at %s\n' "$AGENT_HUB_HOME/skills"
 printf 'Sources available at %s\n' "$AGENT_HUB_HOME/sources.json"
 if [ -n "$old_release" ]; then

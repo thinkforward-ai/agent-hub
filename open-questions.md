@@ -60,3 +60,5 @@ Follow-up to [multi-source skill management](decisions/20261002-1759-multi-sourc
 2. macOS and Windows runtime validation remains open; PowerShell is unavailable in the current environment.
 3. Skill-only browsing, installation, updates, removal, and behavioral safety review remain unverified.
 4. After the trusted-core exception, a temporary offline Linux check passed for no-prompt fresh setup, hardcoded URL despite an override variable, and repeat-install no-op.
+5. A live Linux migration using the published installer succeeded; the old `synced/` content was verified in the backup. After trimming the release to instructions and a shared-skills link, temporary offline Linux fresh and legacy setup checks passed. The live release was cleaned without changing the shared skills folder.
+6. After removing the versioned release layout, temporary offline Linux checks passed for fresh setup, legacy migration, and already-managed migration to direct `AGENTS.md` links. Windows and macOS runtime behavior remains unverified.
