@@ -46,6 +46,10 @@ If any of these paths already exist, the installer will fail unless you use the 
 
 Run the installer again to update the central snapshot. Existing `~/.agent-hub/.env` content is preserved.
 
+## Planned skill management
+
+The current installer still links the entire skills directory and does not support selecting individual skills or adding sources. Bundled defaults in [`sources.json`](sources.json) list Agent Hub and project-guide, but the installer does not use them yet. The accepted [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time migration](decisions/20261002-1831-one-time-skills-reset-migration.md), and [URL-only source registry](decisions/20261002-2026-url-only-skill-source-registry.md) decisions describe the remaining intended design. In the future, the installer will set up or migrate skills once, and a management skill will handle later changes.
+
 ## Instruction Hierarchy
 
 Agent Hub follows this instruction hierarchy:
