@@ -4,35 +4,6 @@ This file contains only unresolved questions that currently require investigatio
 
 **Next question ID:** Q7
 
-## Q3: Skill safety review policy
-
-### Question
-
-What checks and user-facing evidence should Agent Hub require before adding a source or installing or updating any skill?
-
-### Why It Matters
-
-Skills can include instructions and supporting files that have effects beyond their stated purpose; approvals need meaningful evidence and serious failures must stop installation.
-
-### Context
-
-Follow-up to [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md). Legacy migration has the unattended exception recorded in [one-time skills reset migration](decisions/20261002-1831-one-time-skills-reset-migration.md).
-
-### Constraints
-
-- Review core and external skills; require explicit user permission outside the documented legacy migration exception.
-- Do not execute untrusted code during discovery; stop on serious safety-check failures.
-- Do not claim perfect proof that a skill matches its declared purpose.
-
-### Resolution Points
-
-- ❓ **Checks and severity**
-  - **Resolution:** Pending
-  - **Details:** Define source, file, instruction, dependency, and update-delta checks and failure thresholds.
-- ❓ **Consent presentation**
-  - **Resolution:** Pending
-  - **Details:** For updates, explain behavioral, contextual, and conceptual changes rather than only showing a textual diff; point out contradictions, breaking changes, and uncertainty before approval. Define equivalent review detail for source additions and first installs.
-
 ## Q4: Upstream skill contributions
 
 ### Question
@@ -70,7 +41,7 @@ Linux/macOS symlinks and Windows junctions or file links behave differently; mig
 
 ### Context
 
-Follow-up to [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time skills reset migration](decisions/20261002-1831-one-time-skills-reset-migration.md), and [URL-only skill source registry](decisions/20261002-2026-url-only-skill-source-registry.md).
+Follow-up to [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time skills reset migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only skill source registry](decisions/20261002-2026-url-only-skill-source-registry.md), and [skill source safety review](decisions/20261002-2058-skill-source-safety-review.md).
 
 ### Constraints
 
@@ -81,4 +52,4 @@ Follow-up to [multi-source skill management](decisions/20261002-1759-multi-sourc
 
 - ❓ **Test matrix**
   - **Resolution:** Pending
-  - **Details:** Define supported platform/client combinations and fresh setup, unattended legacy reset, repeat-install no-op, URL-only registry persistence, root `skills/` discovery, source-less skill updates, approval, managed updates, collision, backup restoration, link reconstruction, and oldest-backup pruning scenarios.
+  - **Details:** Define supported platform/client combinations and fresh setup, unattended legacy reset, repeat-install no-op, URL-only registry persistence, root `skills/` discovery, source-less skill updates, source URL restrictions, unsafe/incomplete skill reviews, behavioral explanations, separate approvals, managed updates, collision, backup restoration, link reconstruction, and oldest-backup pruning scenarios.
