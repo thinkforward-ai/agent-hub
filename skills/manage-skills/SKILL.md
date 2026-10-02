@@ -4,7 +4,7 @@ description: Browse Agent Hub sources and review, install, remove, or update glo
 source: https://github.com/thinkforward-ai/agent-hub
 ---
 
-# Manage Skills (Draft)
+# Manage Skills
 
 Use the editable `~/.agent-hub/sources.json` registry, a JSON array of repository URL strings initially seeded from Agent Hub's bundled `sources.json`. Manage the shared skills folder as a whole; never silently overwrite an existing skill.
 
