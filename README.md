@@ -47,6 +47,10 @@ Use the `agent-hub-manage-skills` skill to browse sources and to review, install
 
 The design is recorded in [multi-source skill management](decisions/20261002-1759-multi-source-skill-management.md), [one-time migration](decisions/20261002-1831-one-time-skills-reset-migration.md), [URL-only source registry](decisions/20261002-2026-url-only-skill-source-registry.md), [safety review](decisions/20261002-2058-skill-source-safety-review.md), and [trusted core installation](decisions/20261002-2152-trusted-agent-hub-core-installation.md).
 
+## Research structure
+
+[overview.md](overview.md) records the current understanding of Agent Hub. [open-questions.md](open-questions.md) holds unresolved questions, while [decisions/](decisions/) holds immutable accepted decisions. Future raw input artifacts belong in `inputs/` and remain unchanged after capture.
+
 ## Instruction Hierarchy
 
 Agent Hub follows this instruction hierarchy:
