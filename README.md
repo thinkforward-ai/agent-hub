@@ -49,7 +49,7 @@ The design is recorded in [multi-source skill management](decisions/20261002-175
 
 ## Research structure
 
-[overview.md](overview.md) records the current understanding of Agent Hub. [open-questions.md](open-questions.md) holds unresolved questions, while [decisions/](decisions/) holds immutable accepted decisions. Future raw input artifacts belong in `inputs/` and remain unchanged after capture.
+[overview.md](overview.md) records the current understanding of Agent Hub. [open-issues.md](open-issues.md) holds unresolved questions, while [decisions/](decisions/) holds immutable accepted decisions. Future raw input artifacts belong in `inputs/` and remain unchanged after capture.
 
 ## Instruction Hierarchy
 

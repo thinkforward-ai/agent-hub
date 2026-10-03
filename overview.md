@@ -13,7 +13,7 @@ Agent Hub moved from linking one complete skills snapshot to a shared set of ind
 1. Install global instructions and shared skill links for supported clients on Linux/macOS and Windows.
 2. Seed trusted Agent Hub core skills during setup. Use the management skill to browse, review, install, update, and remove skills afterward.
 3. Keep source repositories unchanged and maintain the editable repository URL list separately from installed skills.
-4. Keep current understanding here, unresolved questions in `open-questions.md`, accepted decisions in `decisions/`, and any future raw input artifacts unchanged in `inputs/`.
+4. Keep current understanding here, unresolved questions in `open-issues.md`, accepted decisions in `decisions/`, and any future raw input artifacts unchanged in `inputs/`.
 
 ## Constraints
 
@@ -31,4 +31,4 @@ Agent Hub moved from linking one complete skills snapshot to a shared set of ind
 
 ## Open Questions
 
-The remaining questions are tracked in [open-questions.md](open-questions.md).
+The remaining questions are tracked in [open-issues.md](open-issues.md).
