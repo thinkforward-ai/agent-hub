@@ -44,6 +44,8 @@ Options:
 
 An explicit user trigger implies `Review`. If ignored, stop without recording anything.
 
+If the user answers any gate with a question or feedback, answer it, then repeat the same gate with its exact wording and options.
+
 ## Multiple candidates
 
 If several candidates appear, list them numbered with short descriptions and ask:
@@ -83,7 +85,7 @@ Add `Trade-offs` only when material.
 
 ## Second gate
 
-Use `AskUser` with:
+Use `AskUser` with the full review inside the question (for example as each option's preview) so the dialog cannot hide it. If the tool cannot show it, print the review and give the options as text instead:
 
 1. `Adopt`
 2. `Ignore`
