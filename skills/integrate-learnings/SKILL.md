@@ -61,31 +61,24 @@ On `Review`, process them in order, finishing each before the next. On `Ignore`,
 Present:
 
 ```md
-## Learning Review
-
 **Finding:** <reusable learning>
-**Evidence:** <how it was spotted and what happened>
-**Impact:** <time, failures, attempts, or risk it can prevent>
-**Applicability:** <where it applies and important limits>
-**Recommended destinations:** <best-fit destinations and purpose of each>
-**Exact change:** <exact wording, edit, setting, or instruction>
-**Validation:** <how adoption will be verified>
+
+**Why:** <evidence → impact>
+
+**Where:** <destinations>; upstream: <source URL, if a remote skill>
+
+**Change:** <exact wording, edit, setting, or instruction>
 ```
 
 Recommend every destination that should change to integrate the learning consistently. Explain why each destination is appropriate. Consider scope, lifetime, audience, ownership, and mutability. The user may choose different destinations.
 
-When a destination is a skill file from a remote source repository, include the source URL and guide the user to contribute changes upstream:
-
-```md
-**Source repository:** <URL from skill frontmatter>
-**Upstream contribution:** Propose cloning the repository or finding it locally to make the fix in the source
-```
+When a destination is a skill file from a remote source repository, name its source URL as upstream and make the fix in the source, cloning it or finding it locally.
 
 Add `Trade-offs` only when material.
 
 ## Second gate
 
-Use `AskUser` with the full review inside the question (for example as each option's preview) so the dialog cannot hide it. If the tool cannot show it, print the review and give the options as text instead:
+Use `AskUser` with the review as each option's preview, fields separated by blank lines, so the dialog cannot hide it. If it does not fit, print the review and give the options as text instead:
 
 1. `Adopt`
 2. `Ignore`
