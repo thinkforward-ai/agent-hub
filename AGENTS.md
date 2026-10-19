@@ -2,7 +2,7 @@
 
 Always use numbered lists.
 
-## Communication
+## User interaction
 
 Whenever the Say integration is available, EVERY request for user input MUST
 use an interactive gate, never a plain text-only prompt. For free-text input,
