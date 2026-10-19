@@ -14,6 +14,7 @@ Agent Hub moved from linking one complete skills snapshot to a shared set of ind
 2. Seed trusted Agent Hub core skills during setup. Use the management skill to browse, review, install, update, and remove skills afterward.
 3. Keep source repositories unchanged and maintain the editable repository URL list separately from installed skills.
 4. Keep current understanding here, unresolved questions in `open-issues.md`, accepted decisions in `decisions/`, and any future raw input artifacts unchanged in `inputs/`.
+5. Install an integration's agent-facing skills, supporting resources, and tooling together, reusing suitable installed components. Completion requires the required skills to be installed and tooling verification to pass; report partial installation explicitly.
 
 ## Constraints
 

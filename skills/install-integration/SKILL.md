@@ -36,7 +36,16 @@ metadata:
    cancellation, or no answer means no installation changes. Material
    changes to the plan or risks require another preview and approval.
 
-6. Reuse suitable native dependencies or follow the approved OS installation
+6. Installing an integration includes installing its agent-facing skills and
+   supporting resources into Agent Hub's shared skills folder, alongside its
+   tooling. Include named skill additions or updates in the installation plan
+   and approval, following existing skill-review, naming, backup, and update
+   rules. Reuse suitable installed skills and tooling; do not reinstall
+   working tools merely to add missing skills. Installation is complete only
+   when the required skills are installed and tooling verification passes.
+   Report partial installation explicitly.
+
+7. Reuse suitable native dependencies or follow the approved OS installation
    process. When privileged installation is needed and `sudo` cannot prompt,
    use `pkexec` in a local active graphical session so the user approves in
    the desktop password dialog; otherwise give the user the command to run.
@@ -48,26 +57,26 @@ metadata:
    Do not introduce `.local`/`.config` storage or edit shell startup files;
    Agent Hub's installer owns the marked `~/.bashrc` bootstrap hook.
 
-7. Deploy this skill's declared bootstrap resource as `bootstrap.sh` in
+8. Deploy this skill's declared bootstrap resource as `bootstrap.sh` in
    Agent Hub home when it is missing or outdated. Preserve unrelated content and disclose
    updates in the installation plan.
 
-8. Optional `metadata.integration.aliases` declares shell alias names and
+9. Optional `metadata.integration.aliases` declares shell alias names and
    default argument arrays. Store selected bindings in Hub's `aliases.sh`.
    Bind unclaimed names; preserve existing selections when another provider
    is installed. Do not silently shadow unmanaged names. Quote executable
    paths and default arguments safely; never evaluate metadata as shell code.
    No declared aliases means no alias configuration.
 
-9. New interactive Bash shells load Hub bootstrap through the installer's
-   `~/.bashrc` hook; explain opening a new terminal, or sourcing it in the
-   current shell, scripts, or shells without the hook.
-   Aliases are not inherited by child processes. Noninteractive Bash requires
-   alias expansion, and alias definitions must be loaded before the command
-   using them is parsed. In an agent's noninteractive Bash, source bootstrap
-   on its own line before the line that calls the alias.
+10. New interactive Bash shells load Hub bootstrap through the installer's
+    `~/.bashrc` hook; explain opening a new terminal, or sourcing it in the
+    current shell, scripts, or shells without the hook.
+    Aliases are not inherited by child processes. Noninteractive Bash requires
+    alias expansion, and alias definitions must be loaded before the command
+    using them is parsed. In an agent's noninteractive Bash, source bootstrap
+    on its own line before the line that calls the alias.
 
-10. Guide the installation until the integration works. After installation,
+11. Guide the installation until the integration works. After installation,
     run the integration's declared verification yourself and report its
     output against the expected result. Fall back to one user-run step at a
     time, with its expected result, only for steps the agent cannot perform,
@@ -78,13 +87,13 @@ metadata:
     approval. Finish when verification passes; if it could not run, report
     readiness as unverified.
 
-11. When project mapping is requested, identify the project, capability,
+12. When project mapping is requested, identify the project, capability,
     chosen integrations, and purpose. Ask only for missing information.
     Record the approved mapping in the project's `capabilities.md`.
     Preserve unrelated mappings and omit machine-specific installation state.
     Capability mapping does not automatically create an alias.
 
-12. On failure, restore prior managed content where safe and report changes
+13. On failure, restore prior managed content where safe and report changes
     that cannot safely be reversed. Do not automatically uninstall OS packages.
     Report installation status, alias selections, activation instructions,
     project mappings, verification results, and any user fallback steps.
