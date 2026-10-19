@@ -4,9 +4,14 @@ Always use numbered lists.
 
 ## Communication
 
-Whenever asking the user for input, always offer **Say** alongside the other
-available communication options if the Say integration is available. When
-selected, follow the integration's usage instructions.
+Whenever the Say integration is available, EVERY request for user input MUST
+use an interactive gate, never a plain text-only prompt. For free-text input,
+offer **Say** and **Type my own answer**. For prompts with predefined choices,
+keep those choices and always offer **Say** and a typed custom answer. Use the
+interface's built-in custom-answer control when present; do not duplicate it.
+This applies to short replies, confirmations, corrections, transcript reviews,
+and all other gates. Choosing an input method does not approve the underlying
+action. When Say is selected, follow the integration's usage instructions.
 
 ## Mandatory passive learning detection
 
