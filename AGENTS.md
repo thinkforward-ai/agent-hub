@@ -4,10 +4,9 @@ Always use numbered lists.
 
 ## Communication
 
-When the Say integration is available, always offer **Say** alongside the other
-available communication options wherever longer user input is expected,
-including at gates and during discussions or conversations with the agent.
-When selected, follow the integration's usage instructions.
+Whenever asking the user for input, always offer **Say** alongside the other
+available communication options if the Say integration is available. When
+selected, follow the integration's usage instructions.
 
 ## Mandatory passive learning detection
 
