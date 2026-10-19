@@ -10,8 +10,10 @@ offer **Say** and **Type my own answer**. For prompts with predefined choices,
 keep those choices and always offer **Say** and a typed custom answer. Use the
 interface's built-in custom-answer control when present; do not duplicate it.
 This applies to short replies, confirmations, corrections, transcript reviews,
-and all other gates. Choosing an input method does not approve the underlying
-action. When Say is selected, follow the integration's usage instructions.
+and all other gates. A closing offer or follow-up question is an input request
+too: never end a reply with one in plain text. Choosing an input method does
+not approve the underlying action. When Say is selected, follow the
+integration's usage instructions.
 
 ## Mandatory passive learning detection
 
