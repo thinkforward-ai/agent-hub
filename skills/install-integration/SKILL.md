@@ -1,6 +1,6 @@
 ---
 name: install-integration
-description: Discover or install integrations, configure optional shell aliases, provide user-run verification steps, and map project capabilities.
+description: Discover or install integrations, configure optional shell aliases, guide the user until the integration works, and map project capabilities.
 source: https://github.com/thinkforward-ai/agent-hub
 metadata:
   resources:
@@ -37,7 +37,10 @@ metadata:
    changes to the plan or risks require another preview and approval.
 
 6. Reuse suitable native dependencies or follow the approved OS installation
-   process. Keep OS-managed tools in their normal locations. Install custom
+   process. When privileged installation is needed and `sudo` cannot prompt,
+   use `pkexec` in a local active graphical session so the user approves in
+   the desktop password dialog; otherwise give the user the command to run.
+   Keep OS-managed tools in their normal locations. Install custom
    resources under `${AGENT_HUB_HOME:-$HOME/.agent-hub}/tools/<id>/`,
    preserving relative paths. Do not create redundant bin links or wrappers.
    Implementation languages are unrestricted. Preserve existing files;
@@ -60,10 +63,14 @@ metadata:
    alias expansion, and alias definitions must be loaded before the command
    using them is parsed.
 
-10. Leave verification to the user. Provide manual steps and expected results.
-    Do not automatically run the installed tool, its aliases, smoke tests,
-    or self-tests. Report functional readiness as unverified until the user
-    confirms it.
+10. Guide the user until the integration is fully installed and works.
+    Give one remaining user-run step at a time, such as privileged dependency
+    installation, activation, or verification, with its expected result, and
+    wait for the outcome. Do not automatically run the installed tool, its
+    aliases, smoke tests, or self-tests. On failure, diagnose with read-only
+    inspection and propose the next step; changes beyond the approved plan
+    need a new preview and approval. Finish when the user confirms it works;
+    if they stop earlier, report readiness as unverified.
 
 11. When project mapping is requested, identify the project, capability,
     chosen integrations, and purpose. Ask only for missing information.
