@@ -7,11 +7,14 @@ FACTORY_HOME="${FACTORY_HOME:-$HOME/.factory}"
 DEVIN_CONFIG_HOME="${DEVIN_CONFIG_HOME:-$HOME/.config/devin}"
 CLAUDE_HOME="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 MARKER="$AGENT_HUB_HOME/.layout-v2"
+INSTALLED_BOOTSTRAP="$AGENT_HUB_HOME/skills/agent-hub-install-integration/scripts/bootstrap.sh"
+shell_hook=true
 
 usage() {
-  printf '%s\n' 'Usage: install.sh [--backup-existing]' \
+  printf '%s\n' 'Usage: install.sh [--backup-existing] [--no-shell-hook]' \
     'Set up Agent Hub once, or migrate a legacy installation to the shared skill layout.' \
-    'Conflicting skill paths are backed up automatically. --backup-existing is accepted for compatibility.'
+    'Conflicting skill paths are backed up automatically. --backup-existing is accepted for compatibility.' \
+    'Adds a marked Agent Hub bootstrap hook to ~/.bashrc; --no-shell-hook skips it.'
 }
 
 fail() { printf 'Error: %s\n' "$*" >&2; exit 1; }
@@ -24,9 +27,43 @@ retire_ownership_marker() {
   fi
 }
 
+# Deploy bootstrap.sh when absent and add the marked ~/.bashrc hook once.
+setup_shell() {
+  local source="$1" bootstrap="$AGENT_HUB_HOME/bootstrap.sh" rc="$HOME/.bashrc" backup=""
+  if [ ! -f "$source" ]; then
+    printf 'Bootstrap resource not found; %s was not deployed.\n' "$bootstrap"
+  elif [ ! -e "$bootstrap" ] && [ ! -L "$bootstrap" ]; then
+    cp "$source" "$bootstrap"
+    chmod 644 "$bootstrap"
+    printf 'Installed shell bootstrap: %s\n' "$bootstrap"
+  elif ! cmp -s "$source" "$bootstrap"; then
+    printf 'Left existing %s unchanged; it differs from the bundled bootstrap.\n' "$bootstrap"
+  fi
+  [ "$shell_hook" = true ] || return 0
+  if [ -e "$rc" ] || [ -L "$rc" ]; then
+    if [ ! -f "$rc" ]; then
+      printf 'Skipped shell hook: %s is not a regular file.\n' "$rc"
+      return 0
+    fi
+    grep -Fxq '# >>> agent-hub >>>' "$rc" && return 0
+    mkdir -p "$AGENT_HUB_HOME/backups"
+    backup="$AGENT_HUB_HOME/backups/bashrc-$(date -u +%Y%m%d-%H%M%S)"
+    [ ! -e "$backup" ] || fail "backup path already exists: $backup"
+    cp "$rc" "$backup"
+    cmp -s "$rc" "$backup" || fail "cannot verify backup of $rc"
+    if [ -s "$rc" ] && [ -n "$(tail -c 1 "$rc")" ]; then printf '\n' >>"$rc"; fi
+  fi
+  printf '%s\n' '# >>> agent-hub >>>' \
+    '[ -f "${AGENT_HUB_HOME:-$HOME/.agent-hub}/bootstrap.sh" ] && . "${AGENT_HUB_HOME:-$HOME/.agent-hub}/bootstrap.sh"' \
+    '# <<< agent-hub <<<' >>"$rc"
+  printf 'Added Agent Hub bootstrap hook to %s\n' "$rc"
+  if [ -n "$backup" ]; then printf 'Backup of previous %s: %s\n' "$rc" "$backup"; fi
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --backup-existing) ;;
+    --no-shell-hook) shell_hook=false ;;
     -h | --help) usage; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
@@ -47,6 +84,7 @@ if [ -f "$MARKER" ]; then
   if [ -f "$AGENT_HUB_HOME/AGENTS.md" ] && [ ! -e "$current" ] && [ ! -L "$current" ]; then
     retire_ownership_marker
     printf 'Agent Hub is already set up at %s; use the management skill for changes.\n' "$AGENT_HUB_HOME"
+    setup_shell "$INSTALLED_BOOTSTRAP"
     exit 0
   fi
   [ ! -e "$AGENT_HUB_HOME/AGENTS.md" ] && [ ! -L "$AGENT_HUB_HOME/AGENTS.md" ] &&
@@ -137,6 +175,7 @@ if [ -f "$MARKER" ]; then
   retire_ownership_marker
   printf 'Verified old release backup: %s\n' "$backup"
   printf 'Agent Hub instructions now live at %s/AGENTS.md\n' "$AGENT_HUB_HOME"
+  setup_shell "$INSTALLED_BOOTSTRAP"
   exit 0
 fi
 [ ! -e "$AGENT_HUB_HOME" ] || [ -d "$AGENT_HUB_HOME" ] ||
@@ -253,6 +292,9 @@ if [ "$needs_backup" = true ]; then
   printf 'Verified old skills backup: %s\n' "$backup"
 fi
 
+if [ -f "$snapshot/skills/install-integration/scripts/bootstrap.sh" ]; then
+  cp "$snapshot/skills/install-integration/scripts/bootstrap.sh" "$tmp/bootstrap.sh"
+fi
 mv "$snapshot/skills" "$tmp/core-skills"
 for skill in "$tmp/core-skills"/*; do
   name="$(basename "$skill")"
@@ -355,3 +397,4 @@ printf 'Sources available at %s\n' "$AGENT_HUB_HOME/sources.json"
 if [ -n "$old_release" ]; then
   printf 'Legacy skills are no longer active. Recover them from the backup above if needed.\n'
 fi
+setup_shell "$tmp/bootstrap.sh"

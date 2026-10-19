@@ -45,10 +45,11 @@ metadata:
    preserving relative paths. Do not create redundant bin links or wrappers.
    Implementation languages are unrestricted. Preserve existing files;
    stop on unmanaged collisions and retain prior managed content for recovery.
-   Do not introduce `.local`/`.config` storage or edit shell startup files.
+   Do not introduce `.local`/`.config` storage or edit shell startup files;
+   Agent Hub's installer owns the marked `~/.bashrc` bootstrap hook.
 
 7. Deploy this skill's declared bootstrap resource as `bootstrap.sh` in
-   Agent Hub home when needed. Preserve unrelated content and disclose
+   Agent Hub home when it is missing or outdated. Preserve unrelated content and disclose
    updates in the installation plan.
 
 8. Optional `metadata.integration.aliases` declares shell alias names and
@@ -58,7 +59,9 @@ metadata:
    paths and default arguments safely; never evaluate metadata as shell code.
    No declared aliases means no alias configuration.
 
-9. Explain how to source Hub bootstrap in the shell that will invoke an alias.
+9. New interactive Bash shells load Hub bootstrap through the installer's
+   `~/.bashrc` hook; explain opening a new terminal, or sourcing it in the
+   current shell, scripts, or shells without the hook.
    Aliases are not inherited by child processes. Noninteractive Bash requires
    alias expansion, and alias definitions must be loaded before the command
    using them is parsed.
