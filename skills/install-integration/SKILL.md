@@ -23,7 +23,7 @@ metadata:
 
 3. Before installation changes, describe the complete plan: dependencies
    to reuse or install, sources, commands, privileges, affected files,
-   alias selections, project mappings, activation, user-run verification,
+   alias selections, project mappings, activation, verification,
    and rollback limits. Use only trusted read-only inspection beforehand.
 
 4. Highlight any major or critical security risks, including their cause,
@@ -64,16 +64,19 @@ metadata:
    current shell, scripts, or shells without the hook.
    Aliases are not inherited by child processes. Noninteractive Bash requires
    alias expansion, and alias definitions must be loaded before the command
-   using them is parsed.
+   using them is parsed. In an agent's noninteractive Bash, source bootstrap
+   on its own line before the line that calls the alias.
 
-10. Guide the user until the integration is fully installed and works.
-    Give one remaining user-run step at a time, such as privileged dependency
-    installation, activation, or verification, with its expected result, and
-    wait for the outcome. Do not automatically run the installed tool, its
-    aliases, smoke tests, or self-tests. On failure, diagnose with read-only
-    inspection and propose the next step; changes beyond the approved plan
-    need a new preview and approval. Finish when the user confirms it works;
-    if they stop earlier, report readiness as unverified.
+10. Guide the installation until the integration works. After installation,
+    run the integration's declared verification yourself and report its
+    output against the expected result. Fall back to one user-run step at a
+    time, with its expected result, only for steps the agent cannot perform,
+    such as privileged installation, microphone or other interactive input,
+    or activation in the user's own shell. Also give the user the alias
+    command for use outside the agent. On failure, diagnose and propose the
+    next step; changes beyond the approved plan need a new preview and
+    approval. Finish when verification passes; if it could not run, report
+    readiness as unverified.
 
 11. When project mapping is requested, identify the project, capability,
     chosen integrations, and purpose. Ask only for missing information.
@@ -84,5 +87,6 @@ metadata:
 12. On failure, restore prior managed content where safe and report changes
     that cannot safely be reversed. Do not automatically uninstall OS packages.
     Report installation status, alias selections, activation instructions,
-    project mappings, and user verification steps. Installation permission
-    does not authorize later tool execution.
+    project mappings, verification results, and any user fallback steps.
+    Installation approval covers the declared verification, not later
+    consequential tool use.
